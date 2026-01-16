@@ -5,10 +5,10 @@
     .dependencies = .{
         .roc = .{
             // If you change the url here, change e.g. a single digit in the hash, that will make zig show you the correct hash after running `zig build`.
-            .url = "git+https://github.com/roc-lang/roc#eb723404c4ef5d37cc279a7fd090a3ba76f6b9dc",
+            .url = "git+https://github.com/roc-lang/roc#41b76c3022d1a9a4199473a2b69e3fff99deac6c",
             // After running `zig build`, Zig will provide the correct hash
             // which you should paste here to replace this placeholder
-            .hash = "roc-0.0.0-NAC9wxOemgBT7iBlgi-QM__Nroz_aUd4YS4ohKre_ZRM",
+            .hash = "roc-0.0.0-NAC9w8VXqwB8kRfYior_SLlN4cp2wGq6V8W5hU6SlD4L",
         },
         .secp256k1 = .{
             .url = "https://github.com/bitcoin-core/secp256k1/archive/refs/tags/v0.5.1.tar.gz",
