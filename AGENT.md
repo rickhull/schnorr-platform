@@ -17,40 +17,34 @@ Refer to README.md for:
 - Build instructions
 - Project structure
 
-## Agent-Specific Instructions
+## Tool Preferences
 
-### Build Commands
+### Ripgrep
 
-**Workflows:**
-```bash
-just setup            # one-time setup
-just build            # rebuild C host
-just run              # roc run --linker=legacy main.roc
-just dev              # build + run
-just fresh            # clean + build + run
-```
+Use `ripgrep` (rg) instead of `grep` (always) and `git grep` (nearly always)
 
-### Tool Preferences
+- `git grep` can be used for searching git history
+- see docs/RIPGREP.md for some extensive examples of in-project usage (as needed)
 
-- Use `ripgrep` (rg) instead of `grep`
-- Use `just` instead of `make`
-- Use `curl -sL` for downloads (silent + follow redirects, e.g., Roc docs redirect)
-- Use `curl -sSL` when you need error output too
+### Curl
 
-### Git usage
+For web downloads, use the following options as appropriate.
+Follow redirects by default.
 
-- Use git history to understand the project
-- Treat git as read-only
+- `-L` follow redirects
+- `-s` silent
+- `-S` show errors
+- `-O` dump to filename.html (from the URL) rather than STDOUT
 
-### Roc Language Reference
+### Git
 
-#### Local references preferred
+Use git history to understand the project.  Treat git as read-only.
 
-- docs/roc-tutorial.txt - Condensed tutorial (12KB)
-- docs/stdlib.txt - Condensed stdlib (24KB)
-- docs/stdlib-full.txt - With examples and additional information (132KB)
+### Github
 
-#### Online resources available
+The Github website can present navigation headaches.
 
-- Tutorial: https://www.roc-lang.org/llms.txt (HTML tag soup, 128KB)
-- Stdlib: https://www.roc-lang.org/builtins/llms.txt (Markdown, 156KB)
+- `gh` github client is available
+- Raw github: https://raw.githubusercontent.com/owner/repo/branch/path/to/file.py
+
+
