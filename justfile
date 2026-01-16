@@ -1,0 +1,211 @@
+# Justfile for nostr-platform-zig
+
+# Configuration
+install_root := env_var_or_default("HOME", "") + "/.local"
+platform_dir := "platform"
+
+# ============================================================================
+# Workflows
+# ============================================================================
+#
+# First-time setup:
+#   just setup        # Check tools, install latest Roc nightly, build platform
+#
+# Edit-build-test cycle (after setup):
+#   just build        # Rebuild Zig platform (uses roc-src builtins)
+#   roc hello_world.roc  # Run Roc app
+#
+# Individual steps:
+#   just check-tools  # Check for required tools (zig, curl, jq)
+#   just install-roc  # Install latest Roc nightly
+#   just build        # Build Zig platform
+# ============================================================================
+
+# Check for required tools
+check-tools:
+    #!/usr/bin/env bash
+    echo "Checking required tools..."
+    missing=""
+    for cmd in zig curl jq; do
+        if ! command -v $cmd &> /dev/null; then
+            echo "  ✗ $cmd not found"
+            missing="$missing $cmd"
+        else
+            echo "  ✓ $cmd"
+        fi
+    done
+    if [ -n "$missing" ]; then
+        echo ""
+        echo "Missing: $missing"
+        echo "  zig: https://ziglang.org/download/"
+        echo "  curl, jq: Install via package manager (e.g., pacman -S curl jq)"
+        exit 1
+    fi
+    echo ""
+    echo "All tools satisfied!"
+
+# Check if we have the latest Roc nightly (returns 0 if up-to-date, 1 if needs update)
+check-nightly:
+    #!/usr/bin/env bash
+    set -e
+
+    # Get latest release info from GitHub API
+    release_info=$(curl -s https://api.github.com/repos/roc-lang/nightlies/releases/latest)
+    tag_name=$(echo "$release_info" | jq -r '.tag_name')
+
+    if [ -z "$tag_name" ] || [ "$tag_name" = "null" ]; then
+        echo "Error: Could not fetch latest release info"
+        exit 1
+    fi
+
+    echo "Latest nightly: $tag_name"
+
+    # Check if roc is installed
+    if ! command -v roc &> /dev/null; then
+        echo "✗ Roc not installed"
+        exit 1
+    fi
+
+    current_version=$(roc version 2>&1 | head -1)
+    # Extract commit hash from tag (format: nightly-2026-January-15-41b76c3)
+    latest_commit=$(echo "$tag_name" | sed 's/.*-//')
+
+    if echo "$current_version" | grep -q "$latest_commit"; then
+        echo "✓ Roc $tag_name already installed"
+        echo "  Current: $current_version"
+        exit 0
+    else
+        echo "✗ Update available"
+        echo "  Current: $current_version"
+        echo "  Latest:  $tag_name"
+        exit 1
+    fi
+
+# Fetch and install latest Roc nightly (skips if already up-to-date)
+install-roc: check-tools
+    #!/usr/bin/env bash
+    set -e
+
+    # Check if we already have the latest version (exit early if so)
+    check_output=$(just check-nightly 2>&1 || true)
+    if echo "$check_output" | grep -q "✓ Roc"; then
+        echo "$check_output" | grep "✓ Roc"
+        exit 0
+    fi
+
+    echo "Fetching latest Roc nightly release info..."
+
+    # Get latest release info from GitHub API
+    release_info=$(curl -s https://api.github.com/repos/roc-lang/nightlies/releases/latest)
+    tag_name=$(echo "$release_info" | jq -r '.tag_name')
+
+    if [ -z "$tag_name" ] || [ "$tag_name" = "null" ]; then
+        echo "Error: Could not fetch latest release info"
+        exit 1
+    fi
+
+    echo "Installing $tag_name..."
+
+    # Extract date from tag (format: nightly-2026-January-15-41b76c3)
+    date_part=$(echo "$tag_name" | sed 's/nightly-//' | cut -d'-' -f1-3)
+    commit=$(echo "$tag_name" | sed 's/.*-//')
+
+    # Construct filename (format: roc_nightly-linux_x86_64-2026-01-15-41b76c3.tar.gz)
+    # Need to convert January -> 01, parse the date
+    month=$(echo "$date_part" | cut -d'-' -f2)
+    case "$month" in
+        January) month_num="01" ;;
+        February) month_num="02" ;;
+        March) month_num="03" ;;
+        April) month_num="04" ;;
+        May) month_num="05" ;;
+        June) month_num="06" ;;
+        July) month_num="07" ;;
+        August) month_num="08" ;;
+        September) month_num="09" ;;
+        October) month_num="10" ;;
+        November) month_num="11" ;;
+        December) month_num="12" ;;
+    esac
+
+    year=$(echo "$date_part" | cut -d'-' -f1)
+    day=$(echo "$date_part" | cut -d'-' -f3)
+    numeric_date="$year-$month_num-$day"
+
+    filename="roc_nightly-linux_x86_64-$numeric_date-$commit.tar.gz"
+    download_url="https://github.com/roc-lang/nightlies/releases/download/$tag_name/$filename"
+
+    echo "Downloading $filename..."
+    mkdir -p /tmp/roc-install
+    curl -L "$download_url" -o "/tmp/roc-install/$filename"
+
+    echo "Extracting to {{install_root}}/bin..."
+    mkdir -p {{install_root}}/bin
+    tar -xzf "/tmp/roc-install/$filename" -C /tmp/roc-install
+
+    # Find the extracted directory (should be roc_nightly-linux_x86_64-DATE-HASH)
+    extracted_dir=$(find /tmp/roc-install -maxdepth 1 -type d -name "roc_nightly-*" | head -1)
+
+    if [ -z "$extracted_dir" ]; then
+        echo "Error: Could not find extracted directory"
+        exit 1
+    fi
+
+    # Copy binaries
+    cp "$extracted_dir/roc" {{install_root}}/bin/
+    if [ -f "$extracted_dir/roc_language_server" ]; then
+        cp "$extracted_dir/roc_language_server" {{install_root}}/bin/
+    fi
+
+    # Cleanup
+    rm -rf /tmp/roc-install
+
+    echo "✓ Roc nightly installed to {{install_root}}/bin/roc"
+    echo ""
+    echo "Ensure {{install_root}}/bin is in your PATH:"
+    echo "  export PATH=\"{{install_root}}/bin:\$PATH\""
+    echo ""
+    {{install_root}}/bin/roc version
+
+# Build the Zig platform
+build:
+    #!/usr/bin/env bash
+    set -e
+    echo "Building Zig platform..."
+    zig build -Doptimize=ReleaseSafe
+    echo "✓ Platform built"
+
+# Build for native platform only (faster)
+build-native:
+    #!/usr/bin/env bash
+    set -e
+    echo "Building Zig platform (native only)..."
+    zig build native -Doptimize=ReleaseSafe
+    echo "✓ Platform built (native)"
+
+# One-time full setup
+setup: install-roc build
+
+# Run hello_world example
+run:
+    roc hello_world.roc
+
+# Build and run
+dev: build run
+
+# Clean build artifacts
+clean:
+    rm -rf zig-out .zig-cache
+
+# Update roc-src to latest commit
+update-roc-src:
+    #!/usr/bin/env bash
+    set -e
+    cd roc-platform-template-zig/roc-src
+    git fetch origin
+    git checkout origin/main
+    echo "✓ roc-src updated to latest main"
+
+# List available recipes
+list:
+    just --list
