@@ -1,8 +1,33 @@
-# Justfile for nostr-platform-zig
+# Justfile for nostr-platform
 
 # Configuration
 install_root := env_var_or_default("HOME", "") + "/.local"
 platform_dir := "platform"
+
+# ===
+# Leaf Tasks (basic operations that don't call other tasks)
+# ===
+#
+# just nuke         - Clear all caches (zig-out, .zig-cache, ~/.cache/roc)
+# just clean        - Remove platform build artifacts (zig-out, .zig-cache)
+# just build        - Build Zig platform (all targets)
+# just build-native - Build Zig platform (native target only, faster)
+# just run          - Run hello_world.roc (or default .roc file)
+# just check-tools  - Verify required tools (zig, curl, jq) are installed
+# just check-nightly - Check if Roc nightly is up-to-date
+# just install-roc  - Install latest Roc nightly compiler
+# just fetch-docs   - Update Roc reference docs and Claude skills
+# just list         - List all available recipes
+#
+# ===
+# Workflow Tasks (compose multiple leaf tasks)
+# ===
+#
+# just dev    - Build platform and run app (build → run)
+# just fresh  - Clean build and run (clean → dev)
+# just setup  - Full setup (install-roc → build)
+#
+# ===
 
 # ============================================================================
 # Workflows
@@ -12,16 +37,20 @@ platform_dir := "platform"
 #   just setup        # Check tools, install latest Roc nightly, build platform
 #
 # Edit-build-test cycle (after setup):
-#   just build        # Rebuild Zig platform (uses roc-src builtins)
+#   just build           # Rebuild Zig platform
+#   just run             # roc main.roc
 #   roc hello_world.roc  # Run Roc app
-#   just dev          # Build and run
-#   just fresh        # Clean, build, and run
+#   just dev             # Build and run
+#   just fresh           # Clean, build, and run
+#
+# Reference docs:
+#   just fetch-docs   # Update Roc reference docs (updates Claude skills)
 #
 # When things break:
-#   just nuke         # Nuclear option: clear all caches including Roc
+#   just nuke         # Nuclear option: clear all caches
 #
 # Individual steps:
-#   just check-tools  # Check for required tools (zig, curl, jq)
+#   just check-tools  # Check for required tools
 #   just install-roc  # Install latest Roc nightly
 #   just build        # Build Zig platform
 #   just clean        # Clean platform build artifacts
@@ -174,6 +203,8 @@ install-roc: check-tools
     {{install_root}}/bin/roc version
 
 # Build the Zig platform
+# Note: Zig automatically downloads Roc source from build.zig.zon
+# The roc dependency provides builtins that match your installed roc compiler
 build:
     #!/usr/bin/env bash
     set -e
@@ -210,14 +241,44 @@ nuke:
 # Clean, build, and run
 fresh: clean dev
 
-# Update roc-src to latest commit
-update-roc-src:
+# Fetch latest Roc reference docs and update both docs/ and skill references
+fetch-docs:
     #!/usr/bin/env bash
     set -e
-    cd roc-platform-template-zig/roc-src
-    git fetch origin
-    git checkout origin/main
-    echo "✓ roc-src updated to latest main"
+    echo "Fetching Roc reference docs from GitHub..."
+    mkdir -p docs
+
+    # Fetch Builtin.roc
+    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/src/build/roc/Builtin.roc \
+        -o docs/Builtin.roc
+    echo "  ✓ docs/Builtin.roc"
+
+    # Fetch all_syntax_test.roc
+    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/test/fx/all_syntax_test.roc \
+        -o docs/all_syntax_test.roc
+    echo "  ✓ docs/all_syntax_test.roc"
+
+    # Update roc-language skill references
+    echo "Updating roc-language skill..."
+    mkdir -p ~/.claude/skills/roc-language/references
+    cp docs/Builtin.roc ~/.claude/skills/roc-language/references/
+    cp docs/all_syntax_test.roc ~/.claude/skills/roc-language/references/
+    echo "  ✓ ~/.claude/skills/roc-language/references/"
+
+    # Update roc-platform skill references
+    echo "Updating roc-platform skill..."
+    mkdir -p ~/.claude/skills/roc-platform/references
+    cp docs/Builtin.roc ~/.claude/skills/roc-platform/references/
+    echo "  ✓ ~/.claude/skills/roc-platform/references/"
+
+    echo ""
+    echo "✓ Reference docs updated successfully!"
+    echo "  - docs/Builtin.roc ($(wc -l < docs/Builtin.roc) lines)"
+    echo "  - docs/all_syntax_test.roc ($(wc -l < docs/all_syntax_test.roc) lines)"
+    echo ""
+    echo "Updated skills:"
+    echo "  - roc-language (core syntax and builtins)"
+    echo "  - roc-platform (platform development)"
 
 # List available recipes
 list:
