@@ -1,6 +1,11 @@
 ///! Platform host that tests effectful functions writing to stdout and stderr.
 const std = @import("std");
 const builtins = @import("builtins");
+const secp256k1 = @cImport({
+    @cInclude("secp256k1.h");
+    @cInclude("secp256k1_extrakeys.h");
+    @cInclude("secp256k1_schnorrsig.h");
+});
 
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
@@ -10,6 +15,7 @@ var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init
 const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     stdin_reader: std.fs.File.Reader,
+    secp256k1_ctx: *secp256k1.secp256k1_context,
 };
 
 /// Roc allocation function with size-tracking metadata
@@ -286,22 +292,237 @@ fn hostedStdoutLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
     stdout.writeAll("\n") catch {};
 }
 
+/// Hosted function: Host.pubkey (index 0 - sorted alphabetically)
+/// Derive public key from secret key using secp256k1
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns List U8 - 32-byte public key on success, empty list on error
+fn hostedHostPubkey(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    // Arguments struct for List U8 parameter
+    const Args = extern struct { secret_key: RocList };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Get secret key bytes from RocList
+    const bytes_ptr = args.secret_key.bytes orelse {
+        // Return empty list on error
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    };
+    const secret_key_bytes = bytes_ptr[0..args.secret_key.length];
+
+    // Validate secret key length
+    if (secret_key_bytes.len != 32) {
+        // Return empty list on error
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    }
+
+    // Parse secret key
+    var keypair: secp256k1.secp256k1_keypair = undefined;
+    if (secp256k1.secp256k1_keypair_create(host.secp256k1_ctx, &keypair, secret_key_bytes.ptr) != 1) {
+        // Invalid secret key - return empty list on error
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    }
+
+    // Extract x-only public key from keypair (32 bytes for Nostr)
+    var xonly_pubkey: secp256k1.secp256k1_xonly_pubkey = undefined;
+    var pk_parity: c_int = 0;
+    _ = secp256k1.secp256k1_keypair_xonly_pub(host.secp256k1_ctx, &xonly_pubkey, &pk_parity, &keypair);
+
+    // Serialize x-only public key (32 bytes)
+    var pubkey_bytes: [32]u8 = undefined;
+    _ = secp256k1.secp256k1_xonly_pubkey_serialize(host.secp256k1_ctx, &pubkey_bytes, &xonly_pubkey);
+
+    // Create RocList with 32 bytes
+    const pubkey_list = RocList.allocateExact(
+        @alignOf(u8),
+        32,
+        @sizeOf(u8),
+        false, // elements are not refcounted (u8)
+        ops,
+    );
+
+    @memcpy(@as([*]u8, @ptrCast(@alignCast(pubkey_list.bytes)))[0..32], &pubkey_bytes);
+
+    // Return the list directly
+    const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+    result.* = pubkey_list;
+}
+
+/// Hosted function: Host.sign (index 1 - sorted alphabetically)
+/// Sign a 32-byte digest using Schnorr signature
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns List U8 - 64-byte signature on success, empty list on error
+fn hostedHostSign(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    // Arguments struct for (List U8, List U8) parameters
+    const Args = extern struct { secret_key: RocList, digest: RocList };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Get bytes from RocLists
+    const sk_bytes_ptr = args.secret_key.bytes orelse {
+        // Return empty list on error
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    };
+    const digest_bytes_ptr = args.digest.bytes orelse {
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    };
+
+    const secret_key_bytes = sk_bytes_ptr[0..args.secret_key.length];
+    const digest_bytes = digest_bytes_ptr[0..args.digest.length];
+
+    // Validate lengths
+    if (secret_key_bytes.len != 32 or digest_bytes.len != 32) {
+        // Return empty list on error
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    }
+
+    // Create keypair from secret key
+    var keypair: secp256k1.secp256k1_keypair = undefined;
+    if (secp256k1.secp256k1_keypair_create(host.secp256k1_ctx, &keypair, secret_key_bytes.ptr) != 1) {
+        // Invalid secret key - return empty list on error
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    }
+
+    // Sign using Schnorr
+    var signature: [64]u8 = undefined;
+    if (secp256k1.secp256k1_schnorrsig_sign32(
+        host.secp256k1_ctx,
+        &signature,
+        digest_bytes.ptr,
+        &keypair,
+        null, // aux_rand - NULL means generate random nonce internally
+    ) != 1) {
+        const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocList.empty();
+        return;
+    }
+
+    // Create RocList with 64-byte signature
+    const sig_list = RocList.allocateExact(
+        @alignOf(u8),
+        64,
+        @sizeOf(u8),
+        false,
+        ops,
+    );
+
+    @memcpy(@as([*]u8, @ptrCast(@alignCast(sig_list.bytes)))[0..64], &signature);
+
+    // Return the list directly
+    const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+    result.* = sig_list;
+}
+
+/// Hosted function: Host.verify (index 2 - sorted alphabetically)
+/// Verify a Schnorr signature
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns Bool (true if valid, false if invalid or error)
+fn hostedHostVerify(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    // Arguments struct for (List U8, List U8, List U8) parameters
+    const Args = extern struct { pubkey: RocList, digest: RocList, signature: RocList };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Get bytes from RocLists
+    const pubkey_bytes_ptr = args.pubkey.bytes orelse {
+        const result: *u8 = @ptrCast(@alignCast(ret_ptr));
+        result.* = 0; // false
+        return;
+    };
+    const digest_bytes_ptr = args.digest.bytes orelse {
+        const result: *u8 = @ptrCast(@alignCast(ret_ptr));
+        result.* = 0; // false
+        return;
+    };
+    const sig_bytes_ptr = args.signature.bytes orelse {
+        const result: *u8 = @ptrCast(@alignCast(ret_ptr));
+        result.* = 0; // false
+        return;
+    };
+
+    const pubkey_bytes = pubkey_bytes_ptr[0..args.pubkey.length];
+    const digest_bytes = digest_bytes_ptr[0..args.digest.length];
+    const sig_bytes = sig_bytes_ptr[0..args.signature.length];
+
+    // Validate lengths
+    if (pubkey_bytes.len != 32 or digest_bytes.len != 32 or sig_bytes.len != 64) {
+        // Return false
+        const result: *u8 = @ptrCast(@alignCast(ret_ptr));
+        result.* = 0;
+        return;
+    }
+
+    // Parse x-only public key (32 bytes)
+    var xonly_pubkey: secp256k1.secp256k1_xonly_pubkey = undefined;
+    if (secp256k1.secp256k1_xonly_pubkey_parse(
+        host.secp256k1_ctx,
+        &xonly_pubkey,
+        pubkey_bytes.ptr,
+    ) != 1) {
+        // Invalid public key - return false
+        const result: *u8 = @ptrCast(@alignCast(ret_ptr));
+        result.* = 0;
+        return;
+    }
+
+    // Verify signature using x-only public key
+    const verify_result = secp256k1.secp256k1_schnorrsig_verify(
+        host.secp256k1_ctx,
+        sig_bytes.ptr,
+        digest_bytes.ptr,
+        32, // message length (32 bytes for SHA-256 digest)
+        &xonly_pubkey,
+    );
+
+    // Return true (1) if valid, false (0) if invalid
+    const result: *u8 = @ptrCast(@alignCast(ret_ptr));
+    result.* = if (verify_result == 1) 1 else 0;
+}
+
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// These correspond to the hosted functions defined in Sha256, Stderr, Stdin, and Stdout Type Modules
+/// These correspond to the hosted functions defined in Host, Sha256, Stderr, Stdin, and Stdout modules
 const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
-    hostedSha256Hex, // Sha256.hex! (index 0)
-    hostedStderrLine, // Stderr.line! (index 1)
-    hostedStdinLine, // Stdin.line! (index 2)
-    hostedStdoutLine, // Stdout.line! (index 3)
+    hostedHostPubkey,  // Host.pubkey (index 0)
+    hostedHostSign,    // Host.sign (index 1)
+    hostedHostVerify,  // Host.verify (index 2)
+    hostedSha256Hex,   // Sha256.hex! (index 3)
+    hostedStderrLine,  // Stderr.line! (index 4)
+    hostedStdinLine,   // Stdin.line! (index 5)
+    hostedStdoutLine,  // Stdout.line! (index 6)
 };
 
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var stdin_buffer: [4096]u8 = undefined;
 
+    // Create secp256k1 context (for both signing and verification)
+    const secp256k1_ctx = secp256k1.secp256k1_context_create(
+        secp256k1.SECP256K1_CONTEXT_SIGN | secp256k1.SECP256K1_CONTEXT_VERIFY,
+    ) orelse {
+        std.log.err("Failed to create secp256k1 context", .{});
+        std.process.exit(1);
+    };
+
     var host_env = HostEnv{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
         .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
+        .secp256k1_ctx = secp256k1_ctx,
     };
 
     // Create the RocOps struct
@@ -331,6 +552,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
 
     std.log.debug("[HOST] Returned from roc, exit_code={d}", .{exit_code});
+
+    // Destroy secp256k1 context
+    secp256k1.secp256k1_context_destroy(host_env.secp256k1_ctx);
 
     // Check for memory leaks before returning
     const leak_status = host_env.gpa.deinit();
