@@ -14,11 +14,17 @@ platform_dir := "platform"
 # Edit-build-test cycle (after setup):
 #   just build        # Rebuild Zig platform (uses roc-src builtins)
 #   roc hello_world.roc  # Run Roc app
+#   just dev          # Build and run
+#   just fresh        # Clean, build, and run
+#
+# When things break:
+#   just nuke         # Nuclear option: clear all caches including Roc
 #
 # Individual steps:
 #   just check-tools  # Check for required tools (zig, curl, jq)
 #   just install-roc  # Install latest Roc nightly
 #   just build        # Build Zig platform
+#   just clean        # Clean platform build artifacts
 # ============================================================================
 
 # Check for required tools
@@ -193,9 +199,16 @@ run:
 # Build and run
 dev: build run
 
-# Clean build artifacts
+# Clean platform build artifacts
 clean:
     rm -rf zig-out .zig-cache
+
+# Nuclear option: clean everything including Roc cache
+nuke:
+    rm -rf zig-out .zig-cache ~/.cache/roc
+
+# Clean, build, and run
+fresh: clean dev
 
 # Update roc-src to latest commit
 update-roc-src:

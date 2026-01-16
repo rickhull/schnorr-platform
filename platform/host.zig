@@ -184,7 +184,7 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
 const RocStr = builtins.str.RocStr;
 const RocList = builtins.list.RocList;
 
-/// Hosted function: Stderr.line! (index 0 - sorted alphabetically)
+/// Hosted function: Stderr.line! (index 1 - sorted alphabetically)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns {} and takes Str as argument
 fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
@@ -201,7 +201,7 @@ fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
     stderr.writeAll("\n") catch {};
 }
 
-/// Hosted function: Stdin.line! (index 1 - sorted alphabetically)
+/// Hosted function: Stdin.line! (index 2 - sorted alphabetically)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns Str and takes {} as argument
 fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
@@ -242,7 +242,34 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     result.* = RocStr.init(line.ptr, line.len, ops);
 }
 
-/// Hosted function: Stdout.line! (index 2 - sorted alphabetically)
+/// Hosted function: Sha256.hex! (index 0 - sorted alphabetically)
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns Str (hex-encoded hash) and takes Str as argument
+fn hostedSha256Hex(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    // Arguments struct for single Str parameter
+    const Args = extern struct { str: RocStr };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const message = args.str.asSlice();
+
+    // Compute SHA-256
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(message, &digest, .{});
+
+    // Convert to hex string (64 chars for 32 bytes)
+    var hex_buf: [64]u8 = undefined;
+    const hex_chars = "0123456789abcdef";
+    for (digest, 0..) |byte, i| {
+        hex_buf[i * 2] = hex_chars[byte >> 4];
+        hex_buf[i * 2 + 1] = hex_chars[byte & 0x0F];
+    }
+
+    // Create RocStr from hex string
+    const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
+    result.* = RocStr.init(&hex_buf, 64, ops);
+}
+
+/// Hosted function: Stdout.line! (index 3 - sorted alphabetically)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns {} and takes Str as argument
 fn hostedStdoutLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
@@ -260,11 +287,12 @@ fn hostedStdoutLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
 }
 
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// These correspond to the hosted functions defined in Stderr, Stdin, and Stdout Type Modules
+/// These correspond to the hosted functions defined in Sha256, Stderr, Stdin, and Stdout Type Modules
 const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
-    hostedStderrLine, // Stderr.line! (index 0)
-    hostedStdinLine, // Stdin.line! (index 1)
-    hostedStdoutLine, // Stdout.line! (index 2)
+    hostedSha256Hex, // Sha256.hex! (index 0)
+    hostedStderrLine, // Stderr.line! (index 1)
+    hostedStdinLine, // Stdin.line! (index 2)
+    hostedStdoutLine, // Stdout.line! (index 3)
 };
 
 /// Platform host entrypoint
