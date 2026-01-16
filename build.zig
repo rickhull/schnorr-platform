@@ -232,7 +232,7 @@ fn buildHostLib(
     // Force bundle compiler-rt to resolve runtime symbols like __main
     host_lib.bundle_compiler_rt = true;
 
-    // Compile secp256k1 C library
+    // Compile secp256k1 C library with precomputed tables
     host_lib.addCSourceFile(.{
         .file = secp256k1_dep.path("src/secp256k1.c"),
         .flags = &.{
@@ -241,6 +241,17 @@ fn buildHostLib(
             "-DENABLE_MODULE_EXTRAKEYS",
             "-DENABLE_MODULE_ECDH",
         },
+    });
+
+    // Add precomputed ecmult tables (required by secp256k1)
+    host_lib.addCSourceFile(.{
+        .file = secp256k1_dep.path("src/precomputed_ecmult.c"),
+        .flags = &.{"-DSECP256K1_STATIC"},
+    });
+
+    host_lib.addCSourceFile(.{
+        .file = secp256k1_dep.path("src/precomputed_ecmult_gen.c"),
+        .flags = &.{"-DSECP256K1_STATIC"},
     });
     host_lib.addIncludePath(secp256k1_dep.path("include"));
     host_lib.addIncludePath(secp256k1_dep.path("src"));
