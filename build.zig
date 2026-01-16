@@ -60,6 +60,9 @@ pub fn build(b: *std.Build) void {
     const roc_dep = b.dependency("roc", .{});
     const builtins_module = roc_dep.module("builtins");
 
+    // Get secp256k1 dependency
+    const secp256k1_dep = b.dependency("secp256k1", .{});
+
     // Cleanup step: remove only generated host library files (preserve libc.a, crt1.o, etc.)
     const cleanup_step = b.step("clean", "Remove all built library files");
     for (all_targets) |roc_target| {
@@ -81,7 +84,7 @@ pub fn build(b: *std.Build) void {
     // Build for each Roc target
     for (all_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const host_lib = buildHostLib(b, target, optimize, builtins_module);
+        const host_lib = buildHostLib(b, target, optimize, builtins_module, secp256k1_dep);
 
         // Copy to platform/targets/{target}/libhost.a (or host.lib for Windows)
         copy_all.addCopyFileToSource(
@@ -102,7 +105,7 @@ pub fn build(b: *std.Build) void {
         return;
     };
 
-    const native_lib = buildHostLib(b, native_target, optimize, builtins_module);
+    const native_lib = buildHostLib(b, native_target, optimize, builtins_module, secp256k1_dep);
     b.installArtifact(native_lib);
 
     const copy_native = b.addUpdateSourceFiles();
@@ -210,6 +213,7 @@ fn buildHostLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     builtins_module: *std.Build.Module,
+    secp256k1_dep: *std.Build.Dependency,
 ) *std.Build.Step.Compile {
     const host_lib = b.addLibrary(.{
         .name = "host",
@@ -227,6 +231,20 @@ fn buildHostLib(
     });
     // Force bundle compiler-rt to resolve runtime symbols like __main
     host_lib.bundle_compiler_rt = true;
+
+    // Compile secp256k1 C library
+    host_lib.addCSourceFile(.{
+        .file = secp256k1_dep.path("src/secp256k1.c"),
+        .flags = &.{
+            "-DSECP256K1_STATIC",
+            "-DENABLE_MODULE_SCHNORRSIG",
+            "-DENABLE_MODULE_EXTRAKEYS",
+            "-DENABLE_MODULE_ECDH",
+        },
+    });
+    host_lib.addIncludePath(secp256k1_dep.path("include"));
+    host_lib.addIncludePath(secp256k1_dep.path("src"));
+    host_lib.linkLibC();
 
     return host_lib;
 }
