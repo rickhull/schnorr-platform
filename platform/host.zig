@@ -248,7 +248,38 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     result.* = RocStr.init(line.ptr, line.len, ops);
 }
 
-/// Hosted function: Sha256.hex! (index 0 - sorted alphabetically)
+/// Hosted function: Sha256.binary! (alphabetically before hex!)
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns List U8 (32-byte binary hash) and takes Str as argument
+fn hostedSha256Binary(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    // Arguments struct for single Str parameter
+    const Args = extern struct { str: RocStr };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const message = args.str.asSlice();
+
+    // Compute SHA-256
+    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(message, &digest, .{});
+
+    // Create RocList with 32 bytes
+    const digest_list = RocList.allocateExact(
+        @alignOf(u8),
+        32,
+        @sizeOf(u8),
+        false, // elements are not refcounted (u8)
+        ops,
+    );
+
+    // Copy the digest bytes into the RocList
+    @memcpy(@as([*]u8, @ptrCast(@alignCast(digest_list.bytes)))[0..32], &digest);
+
+    // Return the list
+    const result: *RocList = @ptrCast(@alignCast(ret_ptr));
+    result.* = digest_list;
+}
+
+/// Hosted function: Sha256.hex! (alphabetically after binary!)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns Str (hex-encoded hash) and takes Str as argument
 fn hostedSha256Hex(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
@@ -496,15 +527,27 @@ fn hostedHostVerify(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
 }
 
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// These correspond to the hosted functions defined in Host, Sha256, Stderr, Stdin, and Stdout modules
+///
+/// PLATFORM COUPLING: host.zig ↔ main.roc
+/// This array order MUST match the `exposes` order in platform/main.roc
+///
+/// Convention: Both are sorted alphabetically by fully-qualified name.
+///   - main.roc exposes: [Host, Sha256, Stderr, Stdin, Stdout]
+///   - host.zig array: [hostedHostPubkey, hostedHostSign, ..., hostedStdoutLine]
+///
+/// When adding a new hosted function:
+///   1. Add function pointer here (alphabetical by fully-qualified name)
+///   2. Add module to main.roc exposes (alphabetical order)
+///   3. Ensure index alignment between the two
 const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
-    hostedHostPubkey,  // Host.pubkey (index 0)
-    hostedHostSign,    // Host.sign (index 1)
-    hostedHostVerify,  // Host.verify (index 2)
-    hostedSha256Hex,   // Sha256.hex! (index 3)
-    hostedStderrLine,  // Stderr.line! (index 4)
-    hostedStdinLine,   // Stdin.line! (index 5)
-    hostedStdoutLine,  // Stdout.line! (index 6)
+    hostedHostPubkey,    // Host.pubkey (index 0)
+    hostedHostSign,      // Host.sign (index 1)
+    hostedHostVerify,    // Host.verify (index 2)
+    hostedSha256Binary,  // Sha256.binary! (index 3)
+    hostedSha256Hex,     // Sha256.hex! (index 4)
+    hostedStderrLine,    // Stderr.line! (index 5)
+    hostedStdinLine,     // Stdin.line! (index 6)
+    hostedStdoutLine,    // Stdout.line! (index 7)
 };
 
 /// Platform host entrypoint
