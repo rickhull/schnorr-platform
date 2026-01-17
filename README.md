@@ -1,6 +1,17 @@
 # nostr-platform
 
-A Zig-based Roc platform for building Nostr applications with BIP-340 Schnorr signatures and SHA-256 hashing.
+> **⚠️ IMPORTANT: This project uses the NEW Roc compiler (nightly) with different syntax than documented on roc-lang.org**
+>
+> The official Roc website currently documents the OLD compiler (different syntax, builtins, stdlib).
+> This project uses the NEW compiler whose documentation is located in `docs/Builtin.roc` and `docs/all_syntax_test.roc`.
+>
+> **Key syntax differences from old documentation:**
+> - No `if/then/else` → Use `match` with `Bool.true`/`Bool.false`
+> - No `Num.to_str` → Use `Str.inspect(value)` for string conversion
+> - `List U8` → Use `List(U8)` with parentheses (type application)
+> - Function signatures use `=>` not `->` in module definitions
+>
+> Always verify syntax against `docs/Builtin.roc` - these were fetched from the new compiler source and are authoritative.
 
 ## Overview
 
@@ -191,10 +202,15 @@ If you want to add new modules or extend existing ones, see [docs/platform-dev-g
 
 ## Reference Documentation
 
-### Roc Language & Syntax
+### ⚠️ Roc Compiler Documentation
 
-- [docs/roc-tutorial.txt](docs/roc-tutorial.txt) - Condensed Roc tutorial (12KB)
-- [docs/stdlib.txt](docs/stdlib.txt) - Condensed stdlib reference (24KB)
+**WARNING:** The official Roc website (roc-lang.org) documents the OLD compiler with outdated syntax. This project uses the NEW compiler.
+
+**Authoritative references for the NEW compiler (located in this repo):**
+- [docs/Builtin.roc](docs/Builtin.roc) - Complete builtin functions reference (45KB)
+- [docs/all_syntax_test.roc](docs/all_syntax_test.roc) - Comprehensive syntax examples (15KB)
+
+These were fetched directly from the new Roc compiler source and are **authoritative** for the syntax used in this project.
 
 ### Platform Development
 
@@ -234,7 +250,15 @@ Check the function documentation in `examples/` for correct usage patterns.
 
 ### Wrong syntax errors
 
-If you get syntax errors with `match`, `List.len`, or `Num.*` functions, the Roc documentation in `docs/roc-tutorial.txt` should have the correct syntax. The tutorial is condensed from the current Roc compiler source.
+If you get syntax errors, check official docs (roc-lang.org) against this project's docs:
+
+**Common issues from following old tutorials:**
+- `if ... then ... else` → Not valid, use `match` with `Bool.true`/`Bool.false`
+- `Num.to_str(x)` → Doesn't exist, use `Str.inspect(x)` or `.to_str()` method on numbers
+- `List U8` → Wrong, use `List(U8)` (parentheses for type application)
+- Function signatures using `->` → Use `=>` in module definitions
+
+**Always verify against `docs/Builtin.roc`** - this is authoritative for the NEW compiler used in this project.
 
 ## Project Structure
 
