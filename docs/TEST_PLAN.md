@@ -2,29 +2,44 @@
 
 ## Philosophy
 
-**Hybrid testing approach:** Roc tests for API surface, Zig tests for platform internals.
+**Hybrid testing approach:** Zig tests for platform internals, Roc runtime tests for API validation.
 
-### Roc Tests (`expect`)
-- Test what users experience
-- Validate module interfaces
-- Simple, readable syntax
-- Slower but tests actual usage
+### Important: Roc Testing Limitations
 
-### Zig Tests
+**Host functions are effectful** (marked with `!`) and cannot use `roc test`'s compile-time evaluation.
+
+| Command | When It Runs | What Works |
+|---------|--------------|------------|
+| `roc test file.roc` | **Compile time** | Pure functions only (no `!` effects) |
+| `roc file.roc` | **Runtime** | Any code, including hosted functions |
+
+**For platform development:** Zig tests are primary. Roc "tests" are just runtime assertions in normal programs.
+
+### Zig Tests (Primary for Platform)
 - Test platform internals
 - Edge cases and error handling
 - Memory management
 - Fast to run, direct host access
 - Tests what Roc can't reach
+- Run with `zig test` or `just test-zig`
+
+### Roc Runtime Tests (Secondary)
+- Validate API surface from user perspective
+- Run as normal programs with `roc file.roc`
+- Use `expect` for runtime assertions (crash on failure)
+- Cannot use `roc test` command with hosted functions
 
 ## Directory Structure
 
 ```
 test/
-├── host.roc              # Roc tests for Host module (expect-based)
-├── host.zig              # Zig tests for Host internals
-├── sha256.roc            # Roc tests for Sha256 module
-└── sha256.zig            # Zig tests for Sha256 internals
+├── host.roc              # Roc runtime tests for Host module (run with `roc`, not `roc test`)
+├── host.zig              # Zig unit tests for Host internals (primary)
+├── sha256.roc            # Roc runtime tests for Sha256 module (run with `roc`)
+└── sha256.zig            # Zig unit tests for Sha256 internals (primary)
+
+examples/
+└── *.roc                 # Demonstration programs showing API usage
 ```
 
 ## Justfile Recipes
@@ -53,8 +68,10 @@ just run (replaced by just test)
 
 ### Host Module
 
-#### Roc Tests (`test/host.roc`)
+#### Roc Runtime Tests (`test/host.roc`)
 **Purpose:** Validate Host module API from user perspective
+
+**Note:** These are runtime tests, not compile-time. Run with `roc test/host.roc`, NOT `roc test test/host.roc`.
 
 ```roc
 app [main!] { pf: platform "./platform/main.roc" }
@@ -152,8 +169,10 @@ test "Host.verify: valid signature returns true" {
 
 ### Sha256 Module
 
-#### Roc Tests (`test/sha256.roc`)
+#### Roc Runtime Tests (`test/sha256.roc`)
 **Purpose:** Validate Sha256 API from user perspective
+
+**Note:** These are runtime tests. Run with `roc test/sha256.roc`, NOT `roc test test/sha256.roc`.
 
 ```roc
 app [main!] { pf: platform "./platform/main.roc" }
@@ -177,7 +196,7 @@ main! = |_args| {
 
     # Test 4: Hash length is consistent (64 hex chars)
     hash_result = Sha256.hex!("test")
-    expect Str.len(hash_result) == 64
+    expect Str.count_utf8_bytes(hash_result) == 64
 
     Ok({})
 }
@@ -259,12 +278,12 @@ test "Stderr.line: basic write" {
 
 ## Implementation Steps
 
-1. **Create test/ directory**
-2. **Add Roc test files** with expect syntax
-3. **Add Zig test files** with std.testing
-4. **Update build.zig** to register tests with `b.addTest()`
+1. **Create test/ directory** for Zig tests (primary testing mechanism)
+2. **Add Zig test files** with std.testing
+3. **Update build.zig** to register tests with `b.addTest()`
+4. **Add Roc runtime test files** with expect in main! (run as normal programs)
 5. **Update justfile** with new test recipes
-6. **Migrate hello_world.roc** to examples/
+6. **Migrate working examples** to examples/
 
 ## build.zig Test Registration
 
@@ -316,6 +335,52 @@ pub fn build(b: *std.Build) void {
 3. **Maintainable** - Tests are clear about what they validate
 4. **Developer friendly** - `just dev` for quick edit-build-test cycle
 5. **CI ready** - `just test` for full test suite
+
+## Roc Testing: `roc test` vs `roc`
+
+### Two Modes of Execution
+
+**1. Compile-time testing with `roc test`:**
+```roc
+# Top-level expects (outside main!)
+expect 1 + 1 == 2
+expect List.len([1, 2, 3]) == 3
+
+app [main!] { pf: platform "..." }
+main! = |_args| { Ok({}) }
+```
+- Run with: `roc test file.roc`
+- Evaluates `expect` at compile time
+- Only works with **pure functions** (no `!` effects)
+- Cannot call hosted functions (Host.*, Sha256.*, etc.)
+- Fast feedback for pure logic
+
+**2. Runtime testing with `roc`:**
+```roc
+app [main!] { pf: platform "..." }
+import pf.Host
+
+main! = |_args| {
+    pubkey = Host.pubkey!(secret_key)
+    expect List.len(pubkey) == 32  # Runtime assertion
+    Ok({})
+}
+```
+- Run with: `roc file.roc`
+- Executes `main!` normally
+- Works with **any code** including hosted functions
+- `expect` crashes on failure at runtime
+- Required for platform testing
+
+### For This Platform
+
+Since all platform functions are effectful (hosted), we use:
+
+- **`test/*.zig`** - Zig unit tests (primary, run with `zig test`)
+- **`test/*.roc`** - Roc runtime tests (run with `roc`, not `roc test`)
+- **`examples/*.roc`** - Demonstration programs
+
+**Do NOT use `roc test test/*.roc`** - it will fail with "COMPTIME EVAL ERROR" because hosted functions can't be evaluated at compile time.
 
 ## Future Expansion
 
