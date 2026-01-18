@@ -12,7 +12,8 @@ platform_dir := "platform"
 # just clean        - Remove platform build artifacts (zig-out, .zig-cache)
 # just build        - Build Zig platform (all targets)
 # just build-native - Build Zig platform (native target only, faster)
-# just test         - Run all tests (Zig + Roc)
+# just test         - Run Roc tests only (fast, ~50ms)
+# just test-debug   - Run all tests including Zig (slow, ~600ms)
 # just check-tools  - Verify required tools (zig, curl, jq) are installed
 # just check-nightly - Check if Roc nightly is up-to-date
 # just install-roc  - Install latest Roc nightly compiler
@@ -38,7 +39,8 @@ platform_dir := "platform"
 #
 # Edit-build-test cycle (after setup):
 #   just build           # Rebuild Zig platform
-#   just test            # Run all tests
+#   just test            # Run Roc tests (fast, ~50ms)
+#   just test-debug      # Run all tests including Zig (slow, ~600ms)
 #   just dev             # Build and test
 #   just fresh           # Clean, build, and test
 #   roc hello_world.roc  # Run Roc app directly
@@ -53,7 +55,8 @@ platform_dir := "platform"
 #   just check-tools  # Check for required tools
 #   just install-roc  # Install latest Roc nightly
 #   just build        # Build Zig platform
-#   just test         # Run all tests
+#   just test         # Run Roc tests
+#   just test-debug   # Run all tests
 #   just clean        # Clean platform build artifacts
 # ============================================================================
 
@@ -224,27 +227,31 @@ build-native:
 # One-time full setup
 setup: install-roc build
 
-# Run all tests (Zig + Roc)
+# Run Roc tests only (fast - no Zig overhead)
 test:
     #!/usr/bin/env bash
     set -e
-    echo "Running tests..."
+    echo "Running Roc tests..."
 
-    # Run Zig tests
-    echo "Zig tests:"
-    zig build test
-    echo "  ✓ Zig tests passed"
-
-    # Run Roc tests
-    echo ""
-    echo "Roc tests:"
     roc test/host.roc
     echo "  ✓ host.roc passed"
     roc test/sha256.roc
     echo "  ✓ sha256.roc passed"
 
     echo ""
-    echo "✓ All tests passed!"
+    echo "✓ All Roc tests passed!"
+
+# Run all tests including Zig (slow - includes FFI boundary tests)
+test-debug:
+    #!/usr/bin/env bash
+    set -e
+    echo "Running Zig tests..."
+
+    zig build test
+    echo "  ✓ Zig tests passed"
+    echo ""
+
+    just test
 
 # Build and run tests
 dev: build test

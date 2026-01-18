@@ -48,10 +48,25 @@ examples/
 
 ### Test Recipes
 ```
-just test               - Run all tests (Roc + Zig)
-just dev                - Build platform + run hello_world.roc
+just test               - Run Roc tests only (fast, ~50ms)
+just test-debug         - Run all tests including Zig (slow, ~600ms)
+just dev                - Build platform + run tests
 just build              - Build Zig platform (all targets)
 ```
+
+### Why Separate `test` and `test-debug`?
+
+**Zig test overhead:** ~575ms per run (fixed test infrastructure cost, not per-test)
+
+**Breakdown:**
+- `zig build test`: ~575ms (11 tests, mostly runner overhead)
+- Roc tests: ~50ms total
+
+**Implication:** For most development, you want fast feedback on API changes. The Zig tests test FFI internals and edge cases - useful when debugging platform code, but overkill for routine development.
+
+**Workflow:**
+- Daily development: `just test` (fast, validates API surface)
+- Debugging platform issues: `just test-debug` (slow, validates FFI boundaries)
 
 ### Removed
 ```
@@ -59,7 +74,7 @@ just run                - Removed (not useful - use `just dev` or run roc direct
 just test-host          - Removed (use `just test`)
 just test-sha256        - Removed (use `just test`)
 just test-roc           - Removed (use `just test`)
-just test-zig           - Removed (use `just test`)
+just test-zig           - Removed (use `just test-debug`)
 just smoke-test         - Removed (tests are fast enough to run all)
 ```
 
@@ -236,17 +251,16 @@ test "Sha256.hex: output length" {
 - Zig test files: `test/host.zig`, `test/sha256.zig`
 - Roc runtime test files: `test/host.roc`, `test/sha256.roc`
 - build.zig test registration for Zig tests
+- justfile recipes: `just test` (Roc only), `just test-debug` (all)
 
 ⚠️ **Partially Complete:**
 - `test/host.roc` uses `Stdout.line!` instead of `expect` (doesn't auto-fail)
-- justfile missing `just test` recipe
 
 ❌ **Skipped:**
 - Stdio module tests (not needed - trivial wrappers from template)
 
 🔄 **Next Steps:**
-1. Add `just test` recipe to justfile
-2. Convert `test/host.roc` to use `expect` for proper failure detection
+1. Convert `test/host.roc` to use `expect` for proper failure detection
 
 ## build.zig Test Registration
 
