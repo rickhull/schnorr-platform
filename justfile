@@ -289,6 +289,8 @@ fetch-docs:
     mkdir -p ~/.claude/skills/roc-language/references
     cp docs/Builtin.roc ~/.claude/skills/roc-language/references/
     cp docs/all_syntax_test.roc ~/.claude/skills/roc-language/references/
+    cp docs/ROC_TUTORIAL.md ~/.claude/skills/roc-language/references/
+    cp docs/ROC_TUTORIAL_CONDENSED.md ~/.claude/skills/roc-language/references/
     echo "  ✓ ~/.claude/skills/roc-language/references/"
 
     # Update roc-platform skill references
