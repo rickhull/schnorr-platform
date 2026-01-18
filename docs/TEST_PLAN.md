@@ -252,15 +252,15 @@ test "Sha256.hex: output length" {
 - Roc runtime test files: `test/host.roc`, `test/sha256.roc`
 - build.zig test registration for Zig tests
 - justfile recipes: `just test` (Roc only), `just test-debug` (all)
-
-⚠️ **Partially Complete:**
-- `test/host.roc` uses `Stdout.line!` instead of `expect` (doesn't auto-fail)
+- `test/host.roc` uses `expect` for proper failure detection
 
 ❌ **Skipped:**
 - Stdio module tests (not needed - trivial wrappers from template)
 
-🔄 **Next Steps:**
-1. Convert `test/host.roc` to use `expect` for proper failure detection
+🔄 **Future Work:**
+- Add more edge case tests to `test/host.roc` (invalid inputs, error paths)
+- Performance benchmarks (if needed)
+- Property-based tests (if needed)
 
 ## build.zig Test Registration
 
@@ -293,12 +293,12 @@ pub fn build(b: *std.Build) void {
 
 **Target: ~5-10 tests per module (not comprehensive, but meaningful)**
 
-- **Host module:** ~8 Roc tests + ~5 Zig tests
-  - Roc: API surface (pubkey!, sign!, verify! with valid/invalid inputs)
-  - Zig: edge cases (empty lists, null pointers, invalid lengths)
+- **Host module:** 3 Roc tests + 7 Zig tests
+  - Roc: API surface (pubkey!, sign!, verify! with valid inputs only)
+  - Zig: edge cases (invalid keys, wrong lengths, context creation)
 
-- **Sha256 module:** ~4 Roc tests + ~3 Zig tests
-  - Roc: API surface (known vectors, output format)
+- **Sha256 module:** 5 Roc tests + 4 Zig tests ✅ **On target**
+  - Roc: API surface (known vectors, output format, binary encoding)
   - Zig: empty string, unicode handling, buffer management
 
 - **Stdio modules:** Not tested

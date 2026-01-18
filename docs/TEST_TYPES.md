@@ -7,8 +7,8 @@ This document explains the different testing approaches used in this project, co
 This project uses a hybrid testing approach:
 
 - **Zig tests** - For platform internals and secp256k1 FFI integration
-- **Roc runtime tests** - For API validation and integration testing
-- **No Roc comptime tests** - Comptime tests cannot test hosted functions
+- **Roc runtime assertions** - For API validation and integration testing (in `main!`)
+- **No Roc comptime unit tests** - Comptime unit tests cannot test hosted functions
 
 ---
 
@@ -16,7 +16,7 @@ This project uses a hybrid testing approach:
 
 Roc has two modes for testing, both using the `expect` keyword but in different contexts.
 
-### Roc Comptime Tests
+### Roc Comptime Unit Tests
 
 **Location:** Top-level (outside `main!`)
 
@@ -30,7 +30,7 @@ Roc has two modes for testing, both using the `expect` keyword but in different 
 
 **Example:**
 ```roc
-# Top-level expects (outside main!)
+# Top-level unit tests (outside main!)
 expect 1 + 1 == 2
 expect List.len([1, 2, 3]) == 3
 expect Str.count_utf8_bytes("hello") == 5
@@ -44,7 +44,7 @@ main! = |_args| { Ok({}) }
 - Cannot test I/O operations
 - Cannot test FFI integrations
 
-### Roc Runtime Tests
+### Roc Runtime Assertions
 
 **Location:** Inside `main!`
 
@@ -173,8 +173,8 @@ test "Host: keypair creation from valid secret key" {
 
 ## Comparison Table: Roc vs Zig Testing
 
-| Aspect | Roc Comptime | Roc Runtime | Zig Unit | Zig Integration |
-|--------|--------------|-------------|----------|-----------------|
+| Aspect | Roc Comptime Unit Tests | Roc Runtime Assertions | Zig Unit | Zig Integration |
+|--------|------------------------|------------------------|----------|-----------------|
 | **Keyword** | `expect` | `expect` | `test` | `test` |
 | **Location** | Top-level | Inside `main!` | Inline | Separate file |
 | **Command** | `roc test file.roc` | `roc file.roc` | `zig test file.zig` | `zig build test` |
@@ -242,17 +242,17 @@ When you run `zig build test`:
 
 ```
 test/
-├── host.roc              # Roc runtime tests for Host module
+├── host.roc              # Roc runtime assertions for Host module
 ├── host.zig              # Zig integration tests for secp256k1 FFI
-├── sha256.roc            # Roc runtime tests for Sha256 module
+├── sha256.roc            # Roc runtime assertions for Sha256 module
 └── sha256.zig            # Zig unit tests for Sha256 internals
 ```
 
 | Test File | Type | Command | Tests |
 |----------|------|--------|-------|
-| `test/host.roc` | Roc runtime | `roc test/host.roc` | Host module API |
+| `test/host.roc` | Roc runtime assertions | `roc test/host.roc` | Host module API |
 | `test/host.zig` | Zig integration | `zig build test` | secp256k1 FFI |
-| `test/sha256.roc` | Roc runtime | `roc test/sha256.roc` | Sha256 module API |
+| `test/sha256.roc` | Roc runtime assertions | `roc test/sha256.roc` | Sha256 module API |
 | `test/sha256.zig` | Zig unit | `zig build test` | Sha256 internals |
 
 ---
@@ -263,8 +263,8 @@ test/
 
 | | Roc | Zig |
 |---|---|-----|
-| Comptime tests | ✅ Top-level `expect` | ❌ None |
-| Runtime tests | ✅ `expect` in `main!` | ✅ `test` blocks |
+| Comptime unit tests | ✅ Top-level `expect` | ❌ None |
+| Runtime assertions | ✅ `expect` in `main!` | ✅ `test` blocks |
 | Can test hosted functions | ✅ (runtime only) | ✅ (with FFI setup) |
 | Can test pure logic | ✅ (comptime) | ✅ (any test) |
 | Test discovery | Automatic (file-based) | Automatic (scan for `test` keyword) |
@@ -289,22 +289,22 @@ test/
 # Zig tests (all)
 zig build test
 
-# Roc runtime tests
+# Roc runtime assertions
 roc test/host.roc
 roc test/sha256.roc
 
-# Roc comptime tests (none currently exist in this project)
+# Roc comptime unit tests (none currently exist in this project)
 # roc test file.roc  # Only works with pure functions
 ```
 
 ### Writing Tests
 
-**Roc comptime test (not used for this project):**
+**Roc comptime unit test (not used for this project):**
 ```roc
 expect 1 + 1 == 2
 ```
 
-**Roc runtime test:**
+**Roc runtime assertion:**
 ```roc
 main! = |_args| {
     value = someFunction()
