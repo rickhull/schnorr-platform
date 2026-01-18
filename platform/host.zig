@@ -1,4 +1,22 @@
-///! Platform host that tests effectful functions writing to stdout and stderr.
+///! nostr-platform: Roc host implementation for Nostr cryptographic operations
+///!
+///! This file provides the Zig side of a Roc platform, implementing:
+///!   - Host module: secp256k1 Schnorr signing, verification, pubkey derivation (BIP-340)
+///!   - Sha256 module: SHA-256 hashing (binary and hex output)
+///!   - Stdout/Stderr/Stdin modules: I/O operations
+///!
+///! ARCHITECTURE
+///!
+///! This is "glue code" that bridges Roc applications to Zig/C libraries:
+///!   - Roc applications call hosted functions (Host.*, Sha256.*, etc.)
+///!   - This file translates RocCall ABI calls to Zig/secp256k1 operations
+///!   - Memory management follows Roc's allocator conventions
+///!
+///! TESTING
+///!
+///! No inline Zig tests in this file. This is pure glue code - tests live elsewhere:
+///!   - test/host.zig: secp256k1 FFI integration tests
+///!   - test/*.roc: Roc runtime tests for API validation
 const std = @import("std");
 const builtins = @import("builtins");
 const secp256k1 = @cImport({

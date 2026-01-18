@@ -46,24 +46,21 @@ examples/
 
 ## Justfile Recipes
 
-### Leaf Tasks
+### Test Recipes
 ```
 just test               - Run all tests (Roc + Zig)
-just test-host         - Run Host module tests only
-just test-sha256       - Run Sha256 module tests only
-just test-roc           - Run Roc expect tests only
-just test-zig           - Run Zig unit tests only
-```
-
-### Workflow Tasks
-```
-just dev                - Build platform + run all tests (edit-build-test cycle)
-just smoke-test         - Quick validation (build + examples/hello_world.roc)
+just dev                - Build platform + run hello_world.roc
+just build              - Build Zig platform (all targets)
 ```
 
 ### Removed
 ```
-just run (replaced by just test)
+just run                - Removed (not useful - use `just dev` or run roc directly)
+just test-host          - Removed (use `just test`)
+just test-sha256        - Removed (use `just test`)
+just test-roc           - Removed (use `just test`)
+just test-zig           - Removed (use `just test`)
+just smoke-test         - Removed (tests are fast enough to run all)
 ```
 
 ## Test Scenarios
@@ -233,59 +230,23 @@ test "Sha256.hex: output length" {
 }
 ```
 
-### Stdio Modules (Stdout/Stderr/Stdin)
+## Implementation Status
 
-#### Roc Tests (`test/stdio.roc`)
-**Purpose:** Validate stdio module behavior
+✅ **Complete:**
+- Zig test files: `test/host.zig`, `test/sha256.zig`
+- Roc runtime test files: `test/host.roc`, `test/sha256.roc`
+- build.zig test registration for Zig tests
 
-```roc
-app [main!] { pf: platform "./platform/main.roc" }
+⚠️ **Partially Complete:**
+- `test/host.roc` uses `Stdout.line!` instead of `expect` (doesn't auto-fail)
+- justfile missing `just test` recipe
 
-import pf.Stdout
-import pf.Stderr
+❌ **Skipped:**
+- Stdio module tests (not needed - trivial wrappers from template)
 
-main! = |_args| {
-    # Test 1: Stdout.line! works
-    Stdout.line!("test output")
-
-    # Test 2: Stderr.line! works
-    Stderr.line!("test error")
-
-    # Test 3: Empty strings work
-    Stdout.line!("")
-
-    Ok({})
-}
-```
-
-#### Zig Tests
-**Purpose:** Validate memory management, buffer handling
-
-```zig
-// Test Stdout doesn't crash on empty string
-test "Stdout.line: empty string" {
-    // Should not crash, return successfully
-}
-
-// Test Stdout handles unicode
-test "Stdout.line: unicode" {
-    // Should handle emojis, multi-byte characters
-}
-
-// Test Stderr doesn't crash
-test "Stderr.line: basic write" {
-    // Should write to stderr successfully
-}
-```
-
-## Implementation Steps
-
-1. **Create test/ directory** for Zig tests (primary testing mechanism)
-2. **Add Zig test files** with std.testing
-3. **Update build.zig** to register tests with `b.addTest()`
-4. **Add Roc runtime test files** with expect in main! (run as normal programs)
-5. **Update justfile** with new test recipes
-6. **Migrate working examples** to examples/
+🔄 **Next Steps:**
+1. Add `just test` recipe to justfile
+2. Convert `test/host.roc` to use `expect` for proper failure detection
 
 ## build.zig Test Registration
 
@@ -326,9 +287,10 @@ pub fn build(b: *std.Build) void {
   - Roc: API surface (known vectors, output format)
   - Zig: empty string, unicode handling, buffer management
 
-- **Stdio modules:** ~3 Roc tests + ~2 Zig tests
-  - Roc: basic functionality
-  - Zig: buffer management, error handling
+- **Stdio modules:** Not tested
+  - These are trivial wrappers around Zig's well-tested stdlib
+  - Copied from roc-platform-template-zig (battle-tested)
+  - Indirectly validated by all other tests (they use Stdout.line!)
 
 ## Benefits
 

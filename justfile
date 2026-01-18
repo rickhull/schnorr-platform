@@ -12,7 +12,7 @@ platform_dir := "platform"
 # just clean        - Remove platform build artifacts (zig-out, .zig-cache)
 # just build        - Build Zig platform (all targets)
 # just build-native - Build Zig platform (native target only, faster)
-# just run          - Run hello_world.roc (or default .roc file)
+# just test         - Run all tests (Zig + Roc)
 # just check-tools  - Verify required tools (zig, curl, jq) are installed
 # just check-nightly - Check if Roc nightly is up-to-date
 # just install-roc  - Install latest Roc nightly compiler
@@ -23,8 +23,8 @@ platform_dir := "platform"
 # Workflow Tasks (compose multiple leaf tasks)
 # ===
 #
-# just dev    - Build platform and run app (build → run)
-# just fresh  - Clean build and run (clean → dev)
+# just dev    - Build platform and run tests (build → test)
+# just fresh  - Clean build and test (clean → dev)
 # just setup  - Full setup (install-roc → build)
 #
 # ===
@@ -38,10 +38,10 @@ platform_dir := "platform"
 #
 # Edit-build-test cycle (after setup):
 #   just build           # Rebuild Zig platform
-#   just run             # roc main.roc
-#   roc hello_world.roc  # Run Roc app
-#   just dev             # Build and run
-#   just fresh           # Clean, build, and run
+#   just test            # Run all tests
+#   just dev             # Build and test
+#   just fresh           # Clean, build, and test
+#   roc hello_world.roc  # Run Roc app directly
 #
 # Reference docs:
 #   just fetch-docs   # Update Roc reference docs (updates Claude skills)
@@ -53,6 +53,7 @@ platform_dir := "platform"
 #   just check-tools  # Check for required tools
 #   just install-roc  # Install latest Roc nightly
 #   just build        # Build Zig platform
+#   just test         # Run all tests
 #   just clean        # Clean platform build artifacts
 # ============================================================================
 
@@ -223,12 +224,30 @@ build-native:
 # One-time full setup
 setup: install-roc build
 
-# Run hello_world example
-run:
-    roc hello_world.roc
+# Run all tests (Zig + Roc)
+test:
+    #!/usr/bin/env bash
+    set -e
+    echo "Running tests..."
 
-# Build and run
-dev: build run
+    # Run Zig tests
+    echo "Zig tests:"
+    zig build test
+    echo "  ✓ Zig tests passed"
+
+    # Run Roc tests
+    echo ""
+    echo "Roc tests:"
+    roc test/host.roc
+    echo "  ✓ host.roc passed"
+    roc test/sha256.roc
+    echo "  ✓ sha256.roc passed"
+
+    echo ""
+    echo "✓ All tests passed!"
+
+# Build and run tests
+dev: build test
 
 # Clean platform build artifacts
 clean:
