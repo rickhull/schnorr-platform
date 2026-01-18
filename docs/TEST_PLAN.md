@@ -4,7 +4,7 @@
 
 ## Philosophy
 
-**Hybrid testing approach:** Zig tests for platform internals, Roc runtime tests for API validation.
+**Hybrid testing approach:** Zig tests for platform internals, Roc runtime assertions for API validation.
 
 ### Important: Roc Testing Limitations
 
@@ -23,9 +23,9 @@
 - Memory management
 - Fast to run, direct host access
 - Tests what Roc can't reach
-- Run with `zig test` or `just test-zig`
+- Run with `zig test` or `just test-debug`
 
-### Roc Runtime Tests (Secondary)
+### Roc Runtime Assertions (Secondary)
 - Validate API surface from user perspective
 - Run as normal programs with `roc file.roc`
 - Use `expect` for runtime assertions (crash on failure)
@@ -35,9 +35,9 @@
 
 ```
 test/
-├── host.roc              # Roc runtime tests for Host module (run with `roc`, not `roc test`)
+├── host.roc              # Roc runtime assertions for Host module (run with `roc`, not `roc test`)
 ├── host.zig              # Zig unit tests for Host internals (primary)
-├── sha256.roc            # Roc runtime tests for Sha256 module (run with `roc`)
+├── sha256.roc            # Roc runtime assertions for Sha256 module (run with `roc`)
 └── sha256.zig            # Zig unit tests for Sha256 internals (primary)
 
 examples/
@@ -82,10 +82,10 @@ just smoke-test         - Removed (tests are fast enough to run all)
 
 ### Host Module
 
-#### Roc Runtime Tests (`test/host.roc`)
+#### Roc Runtime Assertions (`test/host.roc`)
 **Purpose:** Validate Host module API from user perspective
 
-**Note:** These are runtime tests, not compile-time. Run with `roc test/host.roc`, NOT `roc test test/host.roc`.
+**Note:** These are runtime assertions, not comptime unit tests. Run with `roc test/host.roc`, NOT `roc test test/host.roc`.
 
 ```roc
 app [main!] { pf: platform "./platform/main.roc" }
@@ -183,10 +183,10 @@ test "Host.verify: valid signature returns true" {
 
 ### Sha256 Module
 
-#### Roc Runtime Tests (`test/sha256.roc`)
+#### Roc Runtime Assertions (`test/sha256.roc`)
 **Purpose:** Validate Sha256 API from user perspective
 
-**Note:** These are runtime tests. Run with `roc test/sha256.roc`, NOT `roc test test/sha256.roc`.
+**Note:** These are runtime assertions. Run with `roc test/sha256.roc`, NOT `roc test test/sha256.roc`.
 
 ```roc
 app [main!] { pf: platform "./platform/main.roc" }
@@ -249,16 +249,16 @@ test "Sha256.hex: output length" {
 
 ✅ **Complete:**
 - Zig test files: `test/host.zig`, `test/sha256.zig`
-- Roc runtime test files: `test/host.roc`, `test/sha256.roc`
+- Roc runtime assertion files: `test/host.roc`, `test/sha256.roc`
 - build.zig test registration for Zig tests
 - justfile recipes: `just test` (Roc only), `just test-debug` (all)
 - `test/host.roc` uses `expect` for proper failure detection
+- `test/host.roc` includes edge case tests (invalid inputs, error paths)
 
 ❌ **Skipped:**
 - Stdio module tests (not needed - trivial wrappers from template)
 
-🔄 **Future Work:**
-- Add more edge case tests to `test/host.roc` (invalid inputs, error paths)
+🔄 **Future Work (Optional):**
 - Performance benchmarks (if needed)
 - Property-based tests (if needed)
 
@@ -293,8 +293,8 @@ pub fn build(b: *std.Build) void {
 
 **Target: ~5-10 tests per module (not comprehensive, but meaningful)**
 
-- **Host module:** 3 Roc tests + 7 Zig tests
-  - Roc: API surface (pubkey!, sign!, verify! with valid inputs only)
+- **Host module:** 8 Roc tests + 7 Zig tests ✅ **On target**
+  - Roc: API surface (pubkey!, sign!, verify! with valid inputs, invalid inputs, edge cases)
   - Zig: edge cases (invalid keys, wrong lengths, context creation)
 
 - **Sha256 module:** 5 Roc tests + 4 Zig tests ✅ **On target**
@@ -308,19 +308,19 @@ pub fn build(b: *std.Build) void {
 
 ## Benefits
 
-1. **Rapid feedback** - Zig tests run fast (~ms)
-2. **Complete coverage** - Roc tests for API, Zig tests for internals
+1. **Rapid feedback** - Roc tests run fast (~50ms), Zig tests take ~600ms
+2. **Complete coverage** - Roc runtime assertions for API, Zig tests for internals
 3. **Maintainable** - Tests are clear about what they validate
 4. **Developer friendly** - `just dev` for quick edit-build-test cycle
-5. **CI ready** - `just test` for full test suite
+5. **CI ready** - `just test-debug` for full test suite
 
 ## Roc Testing: `roc test` vs `roc`
 
 ### Two Modes of Execution
 
-**1. Compile-time testing with `roc test`:**
+**1. Comptime unit tests with `roc test`:**
 ```roc
-# Top-level expects (outside main!)
+# Top-level unit tests (outside any expression)
 expect 1 + 1 == 2
 expect List.len([1, 2, 3]) == 3
 
@@ -333,7 +333,7 @@ main! = |_args| { Ok({}) }
 - Cannot call hosted functions (Host.*, Sha256.*, etc.)
 - Fast feedback for pure logic
 
-**2. Runtime testing with `roc`:**
+**2. Runtime assertions with `roc`:**
 ```roc
 app [main!] { pf: platform "..." }
 import pf.Host
@@ -355,7 +355,7 @@ main! = |_args| {
 Since all platform functions are effectful (hosted), we use:
 
 - **`test/*.zig`** - Zig unit tests (primary, run with `zig test`)
-- **`test/*.roc`** - Roc runtime tests (run with `roc`, not `roc test`)
+- **`test/*.roc`** - Roc runtime assertions (run with `roc`, not `roc test`)
 - **`examples/*.roc`** - Demonstration programs
 
 **Do NOT use `roc test test/*.roc`** - it will fail with "COMPTIME EVAL ERROR" because hosted functions can't be evaluated at compile time.

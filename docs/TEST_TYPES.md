@@ -18,7 +18,7 @@ Roc has two modes for testing, both using the `expect` keyword but in different 
 
 ### Roc Comptime Unit Tests
 
-**Location:** Top-level (outside `main!`)
+**Location:** Top-level (outside any expression)
 
 **Run with:** `roc test file.roc`
 
@@ -30,7 +30,7 @@ Roc has two modes for testing, both using the `expect` keyword but in different 
 
 **Example:**
 ```roc
-# Top-level unit tests (outside main!)
+# Top-level unit tests (outside any expression)
 expect 1 + 1 == 2
 expect List.len([1, 2, 3]) == 3
 expect Str.count_utf8_bytes("hello") == 5
@@ -46,7 +46,7 @@ main! = |_args| { Ok({}) }
 
 ### Roc Runtime Assertions
 
-**Location:** Inside `main!`
+**Location:** Within block expressions (e.g., inside `main!`)
 
 **Run with:** `roc file.roc`
 
@@ -70,7 +70,7 @@ main! = |_args| {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ]
 
-    # Runtime assertions
+    # Runtime assertions (within block expression)
     pubkey = Host.pubkey!(secret_key)
     expect List.len(pubkey) == 32
 
@@ -176,7 +176,7 @@ test "Host: keypair creation from valid secret key" {
 | Aspect | Roc Comptime Unit Tests | Roc Runtime Assertions | Zig Unit | Zig Integration |
 |--------|------------------------|------------------------|----------|-----------------|
 | **Keyword** | `expect` | `expect` | `test` | `test` |
-| **Location** | Top-level | Inside `main!` | Inline | Separate file |
+| **Location** | Top-level (outside any expression) | Within block expressions | Inline | Separate file |
 | **Command** | `roc test file.roc` | `roc file.roc` | `zig test file.zig` | `zig build test` |
 | **When runs** | Compile time | Runtime | Test time | Test time |
 | **Can test hosted functions** | ❌ No | ✅ Yes | N/A | N/A |
@@ -264,7 +264,7 @@ test/
 | | Roc | Zig |
 |---|---|-----|
 | Comptime unit tests | ✅ Top-level `expect` | ❌ None |
-| Runtime assertions | ✅ `expect` in `main!` | ✅ `test` blocks |
+| Runtime assertions | ✅ `expect` in block expressions | ✅ `test` blocks |
 | Can test hosted functions | ✅ (runtime only) | ✅ (with FFI setup) |
 | Can test pure logic | ✅ (comptime) | ✅ (any test) |
 | Test discovery | Automatic (file-based) | Automatic (scan for `test` keyword) |
