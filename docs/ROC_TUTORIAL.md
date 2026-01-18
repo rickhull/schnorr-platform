@@ -438,6 +438,128 @@ letter_to_str = |letter|
 letter_to_str(C)  # => "other"
 ```
 
+### Type Definitions: `=` vs `:=` vs `::`
+
+Roc has three ways to define types, each with different semantics:
+
+#### 1. Structural Type Alias (`=`)
+
+Creates a type alias that can be freely substituted:
+
+```roc
+# Two type aliases with identical structure
+MyResult = [Ok(Str), Err(Str)]
+YourResult = [Ok(Str), Err(Str)]
+
+# They are THE SAME type - can use interchangeably
+use_my_result : MyResult -> Str
+use_my_result = |result| result
+
+use_your_result(MyResult)  # Works! They're identical
+```
+
+**Use when:** You want a convenient name for an existing type structure.
+
+#### 2. Nominal Type (`:=`)
+
+Creates a distinct type even if the structure is identical:
+
+```roc
+# Two wrapper types with identical structure
+MyBytes := [Wrapped(List(U8))]
+YourBytes := [Wrapped(List(U8))]
+
+# They are DIFFERENT types - cannot use interchangeably
+use_my_bytes : MyBytes -> List(U8)
+use_my_bytes = |bytes| bytes
+
+use_my_bytes(YourBytes)  # TYPE ERROR! MyBytes != YourBytes
+
+# Construct with bare tag name
+make_my_bytes : List(U8) -> MyBytes
+make_my_bytes = |bytes| Wrapped(bytes)
+
+# Unwrap via pattern matching
+unwrap_my_bytes : MyBytes -> List(U8)
+unwrap_my_bytes = |bytes|
+    match bytes {
+        Wrapped(b) => b
+    }
+```
+
+**Key properties:**
+- **Type safety:** Prevents mixing different wrapper types
+- **Public:** Can be used from other modules that import it
+- **Nominal:** Type identity is based on the name, not structure
+
+**Use when:** You need wrapper types with compile-time type safety across modules.
+
+#### 3. Opaque Type (`::`)
+
+Creates a nominal type that's **module-private**:
+
+```roc
+# In module Crypto.roc
+SecretKey :: List(U8)
+
+# Can ONLY be used within Crypto.roc
+# Other modules cannot see or construct SecretKey
+```
+
+**Key properties:**
+- **Module-private:** Only visible in the module where it's defined
+- **Nominal:** Distinct type like `:=`
+- **Hidden:** Other modules cannot access the underlying representation
+
+**Use when:** You want to hide implementation details from other modules.
+
+### Comparison Table
+
+| Syntax | Type System | Visibility | Use Case |
+|--------|-------------|------------|----------|
+| `=` | Structural | Public | Type aliases, interchangeable types |
+| `:=` | Nominal | Public | Wrapper types with type safety |
+| `::` | Nominal | Private | Implementation details to hide |
+
+### Practical Example: Type-Safe IDs
+
+Here's a complete example using `:=` for type-safe ID wrappers:
+
+```roc
+# Define distinct ID types
+UserId := [UserId(I64)]
+PostId := [PostId(I64)]
+CommentId := [CommentId(I64)]
+
+# Constructor with validation
+make_user_id : I64 -> Try(UserId, [InvalidId])
+make_user_id = |num|
+    if num > 0 {
+        Ok(UserId(num))
+    } else {
+        Err(InvalidId)
+    }
+
+# Use in functions (type-safe!)
+get_user : UserId -> Str
+get_user = |id|
+    match id {
+        UserId(num) => "User_${num.to_str()}"
+    }
+
+# Compiler prevents passing wrong ID type!
+delete_post : PostId -> Bool
+delete_post = |id| ...
+
+# delete_post(UserId(123))  # TYPE ERROR! UserId != PostId
+```
+
+**Benefits:**
+- ✓ Compiler prevents passing `UserId` where `PostId` expected
+- ✓ Runtime validation in constructors
+- ✓ No need to manually validate in every function
+- ✓ Self-documenting code with descriptive types
+
 ---
 
 ## Pattern Matching

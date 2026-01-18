@@ -191,6 +191,54 @@ match result {
 
 **Rule of thumb:** Local types use bare tags everywhere. Module types need prefix to create, bare in patterns.
 
+### Type Definitions: `=` vs `:=` vs `::`
+
+Roc has three ways to define types with different semantics:
+
+```roc
+# 1. Structural type alias (=)
+# - Can substitute freely - identical types are interchangeable
+MyResult = [Ok(Str), Err(Str)]
+YourResult = [Ok(Str), Err(Str)]
+# MyResult and YourResult are THE SAME type
+
+# 2. Nominal type (:=)
+# - Distinct type even if structure is identical
+# - Public: can be used from other modules
+MyBytes := [Wrapped(List(U8))]
+YourBytes := [Wrapped(List(U8))]
+# MyBytes and YourBytes are DIFFERENT types
+
+# 3. Opaque type (::)
+# - Nominal AND module-private
+# - Can only be used within the module where it's defined
+SecretDigest :: List(U8)  # Only visible in this module
+```
+
+**When to use each:**
+
+- **Use `=`** for simple aliases where interchangeability is fine
+- **Use `:=`** for wrapper types that need type safety across modules
+- **Use `::`** for implementation details you want to hide from other modules
+
+**Example with `:=` (public wrapper type):**
+
+```roc
+# Define (public, can be used from other modules)
+UserId := [UserId(I64)]
+PostId := [PostId(I64)]
+
+# Prevents mixing up different ID types
+get_user : UserId -> Str
+get_user = |id|
+    match id {
+        UserId(num) => "User_${num.to_str()}"
+    }
+
+# Compile-time error: can't pass PostId where UserId expected!
+# get_user(PostId(123))  # TYPE ERROR
+```
+
 ---
 
 ## Pattern Matching
