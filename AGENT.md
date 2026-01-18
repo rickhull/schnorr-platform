@@ -47,4 +47,7 @@ The Github website can present navigation headaches.
 - `gh` github client is available
 - Raw github: https://raw.githubusercontent.com/owner/repo/branch/path/to/file.py
 
+## nostr-platform/tmp dir
 
+- place scratch files in within the project root: nostr-platform/tmp/
+- temp files placed outside the project root will have difficulty finding their platform
