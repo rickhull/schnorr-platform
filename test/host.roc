@@ -2,7 +2,6 @@ app [main!] { pf: platform "../platform/main.roc" }
 
 import pf.Stdout
 import pf.Host
-import pf.Sha256
 
 main! = |_args| {
     # Use a valid secp256k1 secret key (32 bytes, value 1)
@@ -23,32 +22,35 @@ main! = |_args| {
     expect List.len(short_pubkey) == 0
 
     # Test 3: pubkey! returns empty list for wrong length secret key
-    long_key = List.repeat(0xFF_.U8, 33)
+    long_key = List.repeat(0xFF, 33)
     long_pubkey = Host.pubkey!(long_key)
     expect List.len(long_pubkey) == 0
 
-    # Test 4: sign! returns 64 bytes for valid input
+    # Test 4: sha256! returns 32 bytes
     msg = "Hello, Nostr!"
-    msg_digest = Sha256.binary!(msg)
+    msg_digest = Host.sha256!(msg)
+    expect List.len(msg_digest) == 32
+
+    # Test 5: sign! returns 64 bytes for valid input
     sig = Host.sign!(secret_key, msg_digest)
     expect List.len(sig) == 64
 
-    # Test 5: sign! returns empty list for wrong length digest
-    bad_digest = List.repeat(0_.U8, 31)
+    # Test 6: sign! returns empty list for wrong length digest
+    bad_digest = List.repeat(0, 31)
     bad_sig = Host.sign!(secret_key, bad_digest)
     expect List.len(bad_sig) == 0
 
-    # Test 6: verify! returns True for valid signature
+    # Test 7: verify! returns True for valid signature
     is_valid = Host.verify!(pubkey, msg_digest, sig)
     expect is_valid == True
 
-    # Test 7: verify! returns False for invalid signature
-    fake_sig = List.repeat(0xFF_.U8, 64)
+    # Test 8: verify! returns False for invalid signature
+    fake_sig = List.repeat(0xFF, 64)
     is_fake_valid = Host.verify!(pubkey, msg_digest, fake_sig)
     expect is_fake_valid == False
 
-    # Test 8: verify! returns False for wrong length signature
-    short_sig = List.repeat(0_.U8, 63)
+    # Test 9: verify! returns False for wrong length signature
+    short_sig = List.repeat(0, 63)
     is_short_sig_valid = Host.verify!(pubkey, msg_digest, short_sig)
     expect is_short_sig_valid == False
 

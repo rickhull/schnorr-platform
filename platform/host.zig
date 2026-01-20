@@ -266,10 +266,10 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     result.* = RocStr.init(line.ptr, line.len, ops);
 }
 
-/// Hosted function: Sha256.binary! (alphabetically before hex!)
+/// Hosted function: Host.sha256!
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns List U8 (32-byte binary hash) and takes Str as argument
-fn hostedSha256Binary(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedHostSha256(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     // Arguments struct for single Str parameter
     const Args = extern struct { str: RocStr };
     const args: *Args = @ptrCast(@alignCast(args_ptr));
@@ -295,33 +295,6 @@ fn hostedSha256Binary(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_
     // Return the list
     const result: *RocList = @ptrCast(@alignCast(ret_ptr));
     result.* = digest_list;
-}
-
-/// Hosted function: Sha256.hex! (alphabetically after binary!)
-/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
-/// Returns Str (hex-encoded hash) and takes Str as argument
-fn hostedSha256Hex(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    // Arguments struct for single Str parameter
-    const Args = extern struct { str: RocStr };
-    const args: *Args = @ptrCast(@alignCast(args_ptr));
-
-    const message = args.str.asSlice();
-
-    // Compute SHA-256
-    var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
-    std.crypto.hash.sha2.Sha256.hash(message, &digest, .{});
-
-    // Convert to hex string (64 chars for 32 bytes)
-    var hex_buf: [64]u8 = undefined;
-    const hex_chars = "0123456789abcdef";
-    for (digest, 0..) |byte, i| {
-        hex_buf[i * 2] = hex_chars[byte >> 4];
-        hex_buf[i * 2 + 1] = hex_chars[byte & 0x0F];
-    }
-
-    // Create RocStr from hex string
-    const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
-    result.* = RocStr.init(&hex_buf, 64, ops);
 }
 
 /// Hosted function: Stdout.line! (index 3 - sorted alphabetically)
@@ -558,14 +531,13 @@ fn hostedHostVerify(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
 ///   2. Add module to main.roc exposes (alphabetical order)
 ///   3. Ensure index alignment between the two
 const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
-    hostedHostPubkey,    // Host.pubkey (index 0)
-    hostedHostSign,      // Host.sign (index 1)
-    hostedHostVerify,    // Host.verify (index 2)
-    hostedSha256Binary,  // Sha256.binary! (index 3)
-    hostedSha256Hex,     // Sha256.hex! (index 4)
-    hostedStderrLine,    // Stderr.line! (index 5)
-    hostedStdinLine,     // Stdin.line! (index 6)
-    hostedStdoutLine,    // Stdout.line! (index 7)
+    hostedHostPubkey,    // Host.pubkey! (index 0)
+    hostedHostSha256,    // Host.sha256! (index 1)
+    hostedHostSign,      // Host.sign! (index 2)
+    hostedHostVerify,    // Host.verify! (index 3)
+    hostedStderrLine,    // Stderr.line! (index 4)
+    hostedStdinLine,     // Stdin.line! (index 5)
+    hostedStdoutLine,    // Stdout.line! (index 6)
 };
 
 /// Platform host entrypoint

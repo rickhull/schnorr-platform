@@ -3,7 +3,7 @@ Host := [].{
     ## Returns empty list on failure, 32-byte public key on success
     ##
     ## ```roc
-    ## secret_key = List.pad(32, 0)
+    ## secret_key = List.repeat(0, 32)
     ## pubkey = Host.pubkey!(secret_key)
     ## ## Returns List(U8) with 32 bytes
     ## ```
@@ -26,4 +26,14 @@ Host := [].{
     ## ## Returns Bool
     ## ```
     verify! : List(U8), List(U8), List(U8) => Bool
+
+    ## Compute SHA-256 hash and return as 32-byte binary List(U8)
+    ##
+    ## Returns exactly 32 bytes
+    ##
+    ## ```roc
+    ## digest = Host.sha256!("hello world")
+    ## ## Returns List(U8) with 32 bytes
+    ## ```
+    sha256! : Str => List(U8)
 }
