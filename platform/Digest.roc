@@ -18,3 +18,9 @@ Digest := [DigestBytes(List(U8)), ..].{
     bytes : Digest -> List(U8)
     bytes = |DigestBytes(b)| b
 }
+
+## Tests
+expect match Digest.create(List.repeat(0xCC, 32)) {
+    Ok(_) => Bool.True
+    Err(_) => Bool.False
+}

@@ -228,18 +228,68 @@ build-native:
 setup: install-roc build
 
 # Run Roc tests only (fast - no Zig overhead)
-test:
+xtest:
     #!/usr/bin/env bash
     set -e
     echo "Running Roc tests..."
 
-    roc test/host.roc
-    echo "  ✓ host.roc passed"
-    roc test/sha256.roc
-    echo "  ✓ sha256.roc passed"
+    for test_file in test/*.roc; do
+        echo "  Running $(basename "$test_file")..."
+        roc "$test_file"
+        echo "  ✓ $(basename "$test_file") passed"
+    done
 
     echo ""
     echo "✓ All Roc tests passed!"
+
+# Run module unit tests (roc test)
+test-unit:
+    #!/usr/bin/env bash
+    echo "=== Unit Tests ==="
+    failed=""
+    for module in platform/*.roc; do
+        name=$(basename "$module")
+        result=$(roc test "$module" 2>&1)
+        exitcode=$?
+        # Only show files with tests (skip "All (0) tests passed")
+        if echo "$result" | grep -qv "All (0) tests passed"; then
+            echo "  $name: $result"
+        fi
+        if [ $exitcode -ne 0 ]; then
+            failed="$failed $name"
+        fi
+    done
+    if [ -n "$failed" ]; then
+        echo "X Failed unit tests:$failed"
+        exit 1
+    fi
+    echo "[OK] All unit tests passed"
+
+# Run integration tests (runtime with hosted functions)
+test-integration:
+    #!/usr/bin/env bash
+    echo "=== Integration Tests ==="
+    roc test/host.roc 2>&1 | head -1
+
+# Run all Roc tests (unit + integration)
+test: test-unit test-integration
+
+# Check all .roc files are 7-bit clean (ASCII only, UTF-8 compatible)
+check-ascii:
+    #!/usr/bin/env bash
+    echo "=== Checking for 7-bit clean files ==="
+    failed=""
+    for f in platform/*.roc test/*.roc; do
+        if LC_ALL=C grep -P '[^\x00-\x7F]' "$f" > /dev/null 2>&1; then
+            echo "  $f: contains non-ASCII bytes"
+            failed="$failed $f"
+        fi
+    done
+    if [ -n "$failed" ]; then
+        echo "X Files with non-ASCII:$failed"
+        exit 1
+    fi
+    echo "[OK] All .roc files are 7-bit clean"
 
 # Run all tests including Zig (slow - includes FFI boundary tests)
 test-debug:

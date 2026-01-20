@@ -1,4 +1,4 @@
-## PLATFORM COUPLING: main.roc ↔ host.zig
+## PLATFORM COUPLING: main.roc <-> host.zig
 ##
 ## The order of modules in `exposes` must match the order of function pointers
 ## in platform/host.zig's `hosted_function_ptrs` array.

@@ -31,30 +31,39 @@ main! = |_args| {
     msg_digest = Host.sha256!(msg)
     expect List.len(msg_digest) == 32
 
-    # Test 5: sign! returns 64 bytes for valid input
+    # Test 5: sha256! works with empty string
+    empty_hash = Host.sha256!("")
+    expect List.len(empty_hash) == 32
+
+    # Test 6: different inputs produce different hashes
+    hash_a = Host.sha256!("foo")
+    hash_b = Host.sha256!("bar")
+    expect hash_a != hash_b
+
+    # Test 7: sign! returns 64 bytes for valid input
     sig = Host.sign!(secret_key, msg_digest)
     expect List.len(sig) == 64
 
-    # Test 6: sign! returns empty list for wrong length digest
+    # Test 8: sign! returns empty list for wrong length digest
     bad_digest = List.repeat(0, 31)
     bad_sig = Host.sign!(secret_key, bad_digest)
     expect List.len(bad_sig) == 0
 
-    # Test 7: verify! returns True for valid signature
+    # Test 9: verify! returns True for valid signature
     is_valid = Host.verify!(pubkey, msg_digest, sig)
     expect is_valid == True
 
-    # Test 8: verify! returns False for invalid signature
+    # Test 10: verify! returns False for invalid signature
     fake_sig = List.repeat(0xFF, 64)
     is_fake_valid = Host.verify!(pubkey, msg_digest, fake_sig)
     expect is_fake_valid == False
 
-    # Test 9: verify! returns False for wrong length signature
+    # Test 11: verify! returns False for wrong length signature
     short_sig = List.repeat(0, 63)
     is_short_sig_valid = Host.verify!(pubkey, msg_digest, short_sig)
     expect is_short_sig_valid == False
 
-    Stdout.line!("✓ All Host tests passed!")
+    Stdout.line!("[OK] All Host tests passed!")
 
     Ok({})
 }

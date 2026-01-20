@@ -18,3 +18,9 @@ PublicKey := [PublicKeyBytes(List(U8)), ..].{
     bytes : PublicKey -> List(U8)
     bytes = |PublicKeyBytes(b)| b
 }
+
+## Tests
+expect match PublicKey.create(List.repeat(0xDD, 32)) {
+    Ok(_) => Bool.True
+    Err(_) => Bool.False
+}

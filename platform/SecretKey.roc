@@ -18,3 +18,9 @@ SecretKey := [SecretKeyBytes(List(U8)), ..].{
     bytes : SecretKey -> List(U8)
     bytes = |SecretKeyBytes(b)| b
 }
+
+## Tests
+expect match SecretKey.create(List.repeat(0xEE, 32)) {
+    Ok(_) => Bool.True
+    Err(_) => Bool.False
+}

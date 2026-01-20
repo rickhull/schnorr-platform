@@ -18,3 +18,19 @@ Signature := [SignatureBytes(List(U8)), ..].{
     bytes : Signature -> List(U8)
     bytes = |SignatureBytes(b)| b
 }
+
+## Tests
+expect match Signature.create(List.repeat(0xAB, 64)) {
+    Ok(_) => Bool.True
+    Err(_) => Bool.False
+}
+
+expect match Signature.create([1, 2, 3]) {
+    Ok(_) => Bool.False
+    Err(_) => Bool.True
+}
+
+expect match Signature.create(List.repeat(0xAB, 64)) {
+    Ok(s) => List.len(s.bytes()) == 64
+    Err(_) => Bool.False
+}
