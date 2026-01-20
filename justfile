@@ -4,61 +4,30 @@
 install_root := env_var_or_default("HOME", "") + "/.local"
 platform_dir := "platform"
 
-# ===
-# Leaf Tasks (basic operations that don't call other tasks)
-# ===
+# Unit Tasks (no dependencies, no invocations)
+# ---
+# just build            - Build Zig platform (all targets)
+# just build-native     - Build Zig platform (native target only, faster)
+# just check-ascii      - Check all .roc files are 7-bit clean
+# just check-nightly    - Check if Roc nightly is up-to-date
+# just check-tools      - Verify required tools are installed
+# just clean            - Remove platform build artifacts
+# just fetch-docs       - Update Roc reference docs and Claude skills
+# just test-debug       - Run all tests including Zig
+# just test-integration - Run integration tests (runtime with hosted functions)
+# just test-unit        - Run module unit tests (roc test)
 #
-# just nuke         - Clear all caches (zig-out, .zig-cache, ~/.cache/roc)
-# just clean        - Remove platform build artifacts (zig-out, .zig-cache)
-# just build        - Build Zig platform (all targets)
-# just build-native - Build Zig platform (native target only, faster)
-# just test         - Run Roc tests only (fast, ~50ms)
-# just test-debug   - Run all tests including Zig (slow, ~600ms)
-# just check-tools  - Verify required tools (zig, curl, jq) are installed
-# just check-nightly - Check if Roc nightly is up-to-date
-# just install-roc  - Install latest Roc nightly compiler
-# just fetch-docs   - Update Roc reference docs and Claude skills
-# just list         - List all available recipes
-#
-# ===
-# Workflow Tasks (compose multiple leaf tasks)
-# ===
-#
-# just dev    - Build platform and run tests (build → test)
-# just fresh  - Clean build and test (clean → dev)
-# just setup  - Full setup (install-roc → build)
-#
-# ===
 
-# ============================================================================
-# Workflows
-# ============================================================================
-#
-# First-time setup:
-#   just setup        # Check tools, install latest Roc nightly, build platform
-#
-# Edit-build-test cycle (after setup):
-#   just build           # Rebuild Zig platform
-#   just test            # Run Roc tests (fast, ~50ms)
-#   just test-debug      # Run all tests including Zig (slow, ~600ms)
-#   just dev             # Build and test
-#   just fresh           # Clean, build, and test
-#   roc hello_world.roc  # Run Roc app directly
-#
-# Reference docs:
-#   just fetch-docs   # Update Roc reference docs (updates Claude skills)
-#
-# When things break:
-#   just nuke         # Nuclear option: clear all caches
-#
-# Individual steps:
-#   just check-tools  # Check for required tools
-#   just install-roc  # Install latest Roc nightly
-#   just build        # Build Zig platform
-#   just test         # Run Roc tests
-#   just test-debug   # Run all tests
-#   just clean        # Clean platform build artifacts
-# ============================================================================
+# Workflow Tasks (have dependencies or invocations)
+# ---
+# just dev         - Build and run tests (build + test)
+# just fresh       - Clean build and test (clean + dev)
+# just install-roc - Install latest Roc nightly (invokes check-nightly)
+# just nuke         - Clear all caches (clean + ~/.cache/roc)
+# just setup       - Full setup (install-roc + build)
+# just test        - Run all Roc tests (test-unit + test-integration)
+# just test-all    - Run all tests (test + test-debug)
+
 
 # Check for required tools
 check-tools:
@@ -206,9 +175,10 @@ install-roc: check-tools
     echo ""
     {{install_root}}/bin/roc version
 
-# Build the Zig platform
-# Note: Zig automatically downloads Roc source from build.zig.zon
-# The roc dependency provides builtins that match your installed roc compiler
+
+# Note: Zig automatically downloads Roc source (from build.zig.zon)
+
+# Build Zig platform for all targets
 build:
     #!/usr/bin/env bash
     set -e
@@ -226,21 +196,6 @@ build-native:
 
 # One-time full setup
 setup: install-roc build
-
-# Run Roc tests only (fast - no Zig overhead)
-xtest:
-    #!/usr/bin/env bash
-    set -e
-    echo "Running Roc tests..."
-
-    for test_file in test/*.roc; do
-        echo "  Running $(basename "$test_file")..."
-        roc "$test_file"
-        echo "  ✓ $(basename "$test_file") passed"
-    done
-
-    echo ""
-    echo "✓ All Roc tests passed!"
 
 # Run module unit tests (roc test)
 test-unit:
@@ -274,6 +229,9 @@ test-integration:
 # Run all Roc tests (unit + integration)
 test: test-unit test-integration
 
+# Run all tests
+test-all: test test-debug
+
 # Check all .roc files are 7-bit clean (ASCII only, UTF-8 compatible)
 check-ascii:
     #!/usr/bin/env bash
@@ -301,8 +259,6 @@ test-debug:
     echo "  ✓ Zig tests passed"
     echo ""
 
-    just test
-
 # Build and run tests
 dev: build test
 
@@ -311,8 +267,8 @@ clean:
     rm -rf zig-out .zig-cache
 
 # Nuclear option: clean everything including Roc cache
-nuke:
-    rm -rf zig-out .zig-cache ~/.cache/roc
+nuke: clean
+    rm -rf ~/.cache/roc
 
 # Clean, build, and run
 fresh: clean dev
@@ -359,6 +315,3 @@ fetch-docs:
     echo "  - roc-language (core syntax and builtins)"
     echo "  - roc-platform (platform development)"
 
-# List available recipes
-list:
-    just --list
