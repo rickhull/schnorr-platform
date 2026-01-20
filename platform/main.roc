@@ -4,7 +4,7 @@
 ## in platform/host.zig's `hosted_function_ptrs` array.
 ##
 ## Convention: Both are sorted alphabetically by fully-qualified name.
-##   - main.roc: exposes [Host, Sha256, Stderr, Stdin, Stdout]
+##   - main.roc: exposes [Crypto, Host, Stderr, Stdin, Stdout]
 ##   - host.zig: hosted_function_ptrs = [hostedHostPubkey, hostedHostSign, ...]
 ##
 ## When adding a new module:
@@ -13,7 +13,7 @@
 ##   3. Add host function to host.zig (alphabetical order)
 platform ""
     requires {} { main! : List(Str) => Try({}, [Exit(I32)]) }
-    exposes [Host, Sha256, Stderr, Stdin, Stdout]
+    exposes [Digest, Host, PublicKey, SecretKey, Signature, Stderr, Stdin, Stdout]
     packages {}
     provides { main_for_host! : "main_for_host" }
     targets: {
@@ -31,6 +31,10 @@ platform ""
 import Stdout
 import Stderr
 import Stdin
+import Digest
+import PublicKey
+import SecretKey
+import Signature
 
 main_for_host! : List(Str) => I32
 main_for_host! = |args| {
