@@ -6,8 +6,8 @@ platform_dir := "platform"
 
 # Unit Tasks (no dependencies, no invocations)
 # ---
-# just build            - Build Zig platform (all targets)
-# just build-native     - Build Zig platform (native target only, faster)
+# just build            - Quick native build for local development
+# just build-all        - Build all target architectures (for releases)
 # just check-ascii      - Check all .roc files are 7-bit clean
 # just check-nightly    - Check if Roc nightly is up-to-date
 # just check-tools      - Verify required tools are installed
@@ -16,18 +16,16 @@ platform_dir := "platform"
 # just test-debug       - Run all tests including Zig
 # just test-integration - Run integration tests (runtime with hosted functions)
 # just test-unit        - Run module unit tests (roc test)
-#
 
 # Workflow Tasks (have dependencies or invocations)
 # ---
 # just dev         - Build and run tests (build + test)
 # just fresh       - Clean build and test (clean + dev)
 # just install-roc - Install latest Roc nightly (invokes check-nightly)
-# just nuke         - Clear all caches (clean + ~/.cache/roc)
+# just nuke        - Clear all caches (clean + ~/.cache/roc)
 # just setup       - Full setup (install-roc + build)
 # just test        - Run all Roc tests (test-unit + test-integration)
 # just test-all    - Run all tests (test + test-debug)
-
 
 # Check for required tools
 check-tools:
@@ -36,10 +34,10 @@ check-tools:
     missing=""
     for cmd in zig curl jq; do
         if ! command -v $cmd &> /dev/null; then
-            echo "  ✗ $cmd not found"
+            echo "  [X] $cmd not found"
             missing="$missing $cmd"
         else
-            echo "  ✓ $cmd"
+            echo "  [OK] $cmd"
         fi
     done
     if [ -n "$missing" ]; then
@@ -70,7 +68,7 @@ check-nightly:
 
     # Check if roc is installed
     if ! command -v roc &> /dev/null; then
-        echo "✗ Roc not installed"
+        echo "[X] Roc not installed"
         exit 1
     fi
 
@@ -79,11 +77,11 @@ check-nightly:
     latest_commit=$(echo "$tag_name" | sed 's/.*-//')
 
     if echo "$current_version" | grep -q "$latest_commit"; then
-        echo "✓ Roc $tag_name already installed"
+        echo "[OK] Roc $tag_name already installed"
         echo "  Current: $current_version"
         exit 0
     else
-        echo "✗ Update available"
+        echo "[X] Update available"
         echo "  Current: $current_version"
         echo "  Latest:  $tag_name"
         exit 1
@@ -96,8 +94,8 @@ install-roc: check-tools
 
     # Check if we already have the latest version (exit early if so)
     check_output=$(just check-nightly 2>&1 || true)
-    if echo "$check_output" | grep -q "✓ Roc"; then
-        echo "$check_output" | grep "✓ Roc"
+    if echo "$check_output" | grep -q "[OK] Roc"; then
+        echo "$check_output" | grep "[OK] Roc"
         exit 0
     fi
 
@@ -118,6 +116,20 @@ install-roc: check-tools
     date_part=$(echo "$tag_name" | sed 's/nightly-//' | cut -d'-' -f1-3)
     commit=$(echo "$tag_name" | sed 's/.*-//')
 
+    # Detect platform/arch for filename (best-effort, fail fast if unknown)
+    os_name=$(uname -s)
+    arch_name=$(uname -m)
+    case "$os_name" in
+        Linux) platform="linux" ;;
+        Darwin) platform="macos" ;;
+        *) echo "Error: Unsupported OS '$os_name' for Roc nightly install"; exit 1 ;;
+    esac
+    case "$arch_name" in
+        x86_64|amd64) arch="x86_64" ;;
+        arm64|aarch64) arch="arm64" ;;
+        *) echo "Error: Unsupported arch '$arch_name' for Roc nightly install"; exit 1 ;;
+    esac
+
     # Construct filename (format: roc_nightly-linux_x86_64-2026-01-15-41b76c3.tar.gz)
     # Need to convert January -> 01, parse the date
     month=$(echo "$date_part" | cut -d'-' -f2)
@@ -134,25 +146,27 @@ install-roc: check-tools
         October) month_num="10" ;;
         November) month_num="11" ;;
         December) month_num="12" ;;
+        *) echo "Error: Unrecognized month '$month' in tag '$tag_name'"; exit 1 ;;
     esac
 
     year=$(echo "$date_part" | cut -d'-' -f1)
     day=$(echo "$date_part" | cut -d'-' -f3)
     numeric_date="$year-$month_num-$day"
 
-    filename="roc_nightly-linux_x86_64-$numeric_date-$commit.tar.gz"
+    filename="roc_nightly-${platform}_${arch}-$numeric_date-$commit.tar.gz"
     download_url="https://github.com/roc-lang/nightlies/releases/download/$tag_name/$filename"
 
     echo "Downloading $filename..."
-    mkdir -p /tmp/roc-install
-    curl -L "$download_url" -o "/tmp/roc-install/$filename"
+    tmpdir=$(mktemp -d -t roc-install 2>/dev/null || mktemp -d /tmp/roc-install.XXXXXX)
+    trap 'rm -rf "$tmpdir"' EXIT
+    curl -L "$download_url" -o "$tmpdir/$filename"
 
     echo "Extracting to {{install_root}}/bin..."
     mkdir -p {{install_root}}/bin
-    tar -xzf "/tmp/roc-install/$filename" -C /tmp/roc-install
+    tar -xzf "$tmpdir/$filename" -C "$tmpdir"
 
     # Find the extracted directory (should be roc_nightly-linux_x86_64-DATE-HASH)
-    extracted_dir=$(find /tmp/roc-install -maxdepth 1 -type d -name "roc_nightly-*" | head -1)
+    extracted_dir=$(find "$tmpdir" -maxdepth 1 -type d -name "roc_nightly-*" | head -1)
 
     if [ -z "$extracted_dir" ]; then
         echo "Error: Could not find extracted directory"
@@ -166,9 +180,7 @@ install-roc: check-tools
     fi
 
     # Cleanup
-    rm -rf /tmp/roc-install
-
-    echo "✓ Roc nightly installed to {{install_root}}/bin/roc"
+    echo "[OK] Roc nightly installed to {{install_root}}/bin/roc"
     echo ""
     echo "Ensure {{install_root}}/bin is in your PATH:"
     echo "  export PATH=\"{{install_root}}/bin:\$PATH\""
@@ -178,21 +190,21 @@ install-roc: check-tools
 
 # Note: Zig automatically downloads Roc source (from build.zig.zon)
 
-# Build Zig platform for all targets
+# Quick native build for local development
 build:
-    #!/usr/bin/env bash
-    set -e
-    echo "Building Zig platform..."
-    zig build -Doptimize=ReleaseSafe
-    echo "✓ Platform built"
-
-# Build for native platform only (faster)
-build-native:
     #!/usr/bin/env bash
     set -e
     echo "Building Zig platform (native only)..."
     zig build native -Doptimize=ReleaseSafe
-    echo "✓ Platform built (native)"
+    echo "[OK] Platform built"
+
+# Build all target architectures (for releases)
+build-all:
+    #!/usr/bin/env bash
+    set -e
+    echo "Building Zig platform (all targets)..."
+    zig build -Doptimize=ReleaseSafe
+    echo "[OK] Platform built (all targets)"
 
 # One-time full setup
 setup: install-roc build
@@ -222,9 +234,7 @@ test-unit:
 
 # Run integration tests (runtime with hosted functions)
 test-integration:
-    #!/usr/bin/env bash
-    echo "=== Integration Tests ==="
-    roc test/host.roc 2>&1 | head -1
+    roc test/host.roc
 
 # Run all Roc tests (unit + integration)
 test: test-unit test-integration
@@ -236,9 +246,21 @@ test-all: test test-debug
 check-ascii:
     #!/usr/bin/env bash
     echo "=== Checking for 7-bit clean files ==="
+    has_non_ascii() {
+        local file="$1"
+        if command -v rg >/dev/null 2>&1; then
+            rg -q --pcre2 '[^\x00-\x7F]' "$file"
+            return $?
+        fi
+        # BusyBox-compatible fallback: strip ASCII bytes, check if anything remains.
+        if LC_ALL=C tr -d '\000-\177' < "$file" | head -c 1 | grep -q .; then
+            return 0
+        fi
+        return 1
+    }
     failed=""
     for f in platform/*.roc test/*.roc; do
-        if LC_ALL=C grep -P '[^\x00-\x7F]' "$f" > /dev/null 2>&1; then
+        if has_non_ascii "$f"; then
             echo "  $f: contains non-ASCII bytes"
             failed="$failed $f"
         fi
@@ -256,7 +278,7 @@ test-debug:
     echo "Running Zig tests..."
 
     zig build test
-    echo "  ✓ Zig tests passed"
+    echo "  [OK] Zig tests passed"
     echo ""
 
 # Build and run tests
@@ -283,12 +305,12 @@ fetch-docs:
     # Fetch Builtin.roc
     curl -s https://raw.githubusercontent.com/roc-lang/roc/main/src/build/roc/Builtin.roc \
         -o docs/Builtin.roc
-    echo "  ✓ docs/Builtin.roc"
+    echo "  [OK] docs/Builtin.roc"
 
     # Fetch all_syntax_test.roc
     curl -s https://raw.githubusercontent.com/roc-lang/roc/main/test/fx/all_syntax_test.roc \
         -o docs/all_syntax_test.roc
-    echo "  ✓ docs/all_syntax_test.roc"
+    echo "  [OK] docs/all_syntax_test.roc"
 
     # Update roc-language skill references
     echo "Updating roc-language skill..."
@@ -298,20 +320,19 @@ fetch-docs:
     cp docs/ROC_TUTORIAL.md     ~/.claude/skills/roc-language/references/
     cp docs/ROC_TUTORIAL_CONDENSED.md ~/.claude/skills/roc-language/references/
     cp docs/ROC_LANGREF_TUTORIAL.md   ~/.claude/skills/roc-language/references/
-    echo "  ✓ ~/.claude/skills/roc-language/references/"
+    echo "  [OK] ~/.claude/skills/roc-language/references/"
 
     # Update roc-platform skill references
     echo "Updating roc-platform skill..."
     mkdir -p ~/.claude/skills/roc-platform/references
     cp docs/Builtin.roc ~/.claude/skills/roc-platform/references/
-    echo "  ✓ ~/.claude/skills/roc-platform/references/"
+    echo "  [OK] ~/.claude/skills/roc-platform/references/"
 
     echo ""
-    echo "✓ Reference docs updated successfully!"
+    echo "[OK] Reference docs updated successfully!"
     echo "  - docs/Builtin.roc ($(wc -l < docs/Builtin.roc) lines)"
     echo "  - docs/all_syntax_test.roc ($(wc -l < docs/all_syntax_test.roc) lines)"
     echo ""
     echo "Updated skills:"
     echo "  - roc-language (core syntax and builtins)"
     echo "  - roc-platform (platform development)"
-
