@@ -99,13 +99,14 @@ pub fn build(b: *std.Build) void {
 
     const native_target = b.standardTargetOptions(.{});
 
-    // Detect native RocTarget and copy to proper targets folder
+    // Detect native RocTarget based on host, then build using that Roc target.
     const native_roc_target = detectNativeRocTarget(native_target.result) orelse {
         std.debug.print("Unsupported native platform\n", .{});
         return;
     };
 
-    const native_lib = buildHostLib(b, native_target, optimize, builtins_module, secp256k1_dep);
+    const native_roc_zig_target = b.resolveTargetQuery(native_roc_target.toZigTarget());
+    const native_lib = buildHostLib(b, native_roc_zig_target, optimize, builtins_module, secp256k1_dep);
     b.installArtifact(native_lib);
 
     const copy_native = b.addUpdateSourceFiles();

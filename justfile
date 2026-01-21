@@ -6,12 +6,11 @@ platform_dir := "platform"
 
 # Unit Tasks (no dependencies, no invocations)
 # ---
-# just build            - Quick native build for local development
-# just build-all        - Build all target architectures (for releases)
 # just check-ascii      - Check all .roc files are 7-bit clean
 # just check-nightly    - Check if Roc nightly is up-to-date
 # just check-tools      - Verify required tools are installed
 # just clean            - Remove platform build artifacts
+# just built            - Record successful build markers
 # just fetch-docs       - Update Roc reference docs and Claude skills
 # just test-debug       - Run all tests including Zig
 # just test-integration - Run integration tests (runtime with hosted functions)
@@ -19,11 +18,14 @@ platform_dir := "platform"
 
 # Workflow Tasks (have dependencies or invocations)
 # ---
+# just build       - Quick native build for local development (hygiene + built)
+# just build-all   - Build all target architectures (for releases; hygiene + built)
 # just dev         - Build and run tests (build + test)
 # just fresh       - Clean build and test (clean + dev)
+# just hygiene     - Pre-build checks (clean/nuke when needed)
 # just install-roc - Install latest Roc nightly (invokes check-nightly)
 # just nuke        - Clear all caches (clean + ~/.cache/roc)
-# just setup       - Full setup (install-roc + build)
+# just setup       - Full setup (install-roc + build-all)
 # just test        - Run all Roc tests (test-unit + test-integration)
 # just test-all    - Run all tests (test + test-debug)
 
@@ -191,19 +193,49 @@ install-roc: check-tools
 # Note: Zig automatically downloads Roc source (from build.zig.zon)
 
 # Quick native build for local development
-build:
+hygiene:
+    #!/usr/bin/env bash
+    set -e
+    # Pre-checks: clean/nuke when build config or Roc version changed.
+    if [ -f "zig-out/.last-build" ] && \
+       { [ "build.zig" -nt "zig-out/.last-build" ] || [ "build.zig.zon" -nt "zig-out/.last-build" ]; }; then
+        echo "Build configuration changed - cleaning..."
+        just clean
+    fi
+    if command -v roc >/dev/null 2>&1; then
+        current_version=$(roc version)
+        cached_version=$(cat zig-out/.roc-version 2>/dev/null || echo "")
+        if [ -n "$cached_version" ] && [ "$current_version" != "$cached_version" ]; then
+            echo "Roc version changed - nuking cache..."
+            just nuke
+        fi
+    fi
+
+built:
+    #!/usr/bin/env bash
+    set -e
+    # Record successful build
+    mkdir -p zig-out
+    if command -v roc >/dev/null 2>&1; then
+        echo "$(roc version)" > zig-out/.roc-version
+    fi
+    touch zig-out/.last-build
+
+build: hygiene
     #!/usr/bin/env bash
     set -e
     echo "Building Zig platform (native only)..."
     zig build native -Doptimize=ReleaseSafe
+    just built
     echo "[OK] Platform built"
 
 # Build all target architectures (for releases)
-build-all:
+build-all: hygiene
     #!/usr/bin/env bash
     set -e
     echo "Building Zig platform (all targets)..."
     zig build -Doptimize=ReleaseSafe
+    just built
     echo "[OK] Platform built (all targets)"
 
 # One-time full setup
