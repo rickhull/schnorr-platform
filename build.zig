@@ -158,7 +158,6 @@ pub fn build(b: *std.Build) void {
             "-DSECP256K1_STATIC",
             "-DENABLE_MODULE_SCHNORRSIG",
             "-DENABLE_MODULE_EXTRAKEYS",
-            "-DENABLE_MODULE_ECDH",
         },
     });
     host_module_tests.addCSourceFile(.{
@@ -259,7 +258,6 @@ fn buildHostLib(
             "-DSECP256K1_STATIC",
             "-DENABLE_MODULE_SCHNORRSIG",
             "-DENABLE_MODULE_EXTRAKEYS",
-            "-DENABLE_MODULE_ECDH",
         },
     });
 

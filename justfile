@@ -6,54 +6,79 @@ platform_dir := "platform"
 
 # Unit Tasks (no dependencies, no invocations)
 # ---
-# just check-ascii      - Check all .roc files are 7-bit clean
-# just check-nightly    - Check if Roc nightly is up-to-date
-# just check-tools      - Verify required tools are installed
-# just clean            - Remove platform build artifacts
-# just built            - Record successful build markers
-# just fetch-docs       - Update Roc reference docs and Claude skills
-# just test-debug       - Run all tests including Zig
-# just test-integration - Run integration tests (runtime with hosted functions)
-# just test-unit        - Run module unit tests (roc test)
+# built            - Record successful build markers
+# check-ascii      - Check all .roc files are 7-bit clean
+# check-nightly    - Check if Roc nightly is up-to-date
+# clean            - Remove platform build artifacts
+# fetch-docs       - Update Roc reference docs and Claude skills
+# test-integration - Run integration tests (hosted functions)
+# test-unit        - Run module unit tests (roc test)
+# test-zig         - Run zig tests, slow
+# tools-build      - Verify zig is available
+# tools-fetch      - Verify curl is available
 
 # Workflow Tasks (have dependencies or invocations)
 # ---
-# just build       - Quick native build for local development (hygiene + built)
-# just build-all   - Build all target architectures (for releases; hygiene + built)
-# just dev         - Build and run tests (build + test)
-# just fresh       - Clean build and test (clean + dev)
-# just hygiene     - Pre-build checks (clean/nuke when needed)
-# just install-roc - Install latest Roc nightly (invokes check-nightly)
-# just nuke        - Clear all caches (clean + ~/.cache/roc)
-# just setup       - Full setup (install-roc + build-all)
-# just test        - Run all Roc tests (test-unit + test-integration)
-# just test-all    - Run all tests (test + test-debug)
+# build         - Build native (hygiene built)
+# build-all     - Build all targets (hygiene built)
+# dev           - (build test)
+# fresh         - (clean dev)
+# hygiene       - Conditional (clean nuke)
+# install-roc   - (check-nightly)
+# nuke          - (clean)
+# setup         - (install-roc build-all)
+# test          - (test-unit test-integration)
+# test-all      - (test + test-zig)
+# tools-install - Verify jq is available (tools-fetch)
+# tools-all     - (tools-build, tools-install)
 
-# Check for required tools
-check-tools:
+
+#
+# Unit Tasks
+# ==========
+
+# set timestamped build markers, checked by hygiene
+built:
     #!/usr/bin/env bash
-    echo "Checking required tools..."
-    missing=""
-    for cmd in zig curl jq; do
-        if ! command -v $cmd &> /dev/null; then
-            echo "  [X] $cmd not found"
-            missing="$missing $cmd"
-        else
-            echo "  [OK] $cmd"
+    set -e
+    # Record successful build
+    mkdir -p zig-out
+    if command -v roc >/dev/null 2>&1; then
+        echo "$(roc version)" > zig-out/.roc-version
+    fi
+    touch zig-out/.last-build
+
+# Check all .roc files are 7-bit clean (ASCII only, UTF-8 compatible)
+check-ascii:
+    #!/usr/bin/env bash
+    echo "=== Checking for 7-bit clean files ==="
+    has_non_ascii() {
+        local file="$1"
+        if command -v rg >/dev/null 2>&1; then
+            rg -q --pcre2 '[^\x00-\x7F]' "$file"
+            return $?
+        fi
+        # BusyBox-compatible fallback: strip ASCII bytes, check if anything remains.
+        if LC_ALL=C tr -d '\000-\177' < "$file" | head -c 1 | grep -q .; then
+            return 0
+        fi
+        return 1
+    }
+    failed=""
+    for f in platform/*.roc test/*.roc; do
+        if has_non_ascii "$f"; then
+            echo "  $f: contains non-ASCII bytes"
+            failed="$failed $f"
         fi
     done
-    if [ -n "$missing" ]; then
-        echo ""
-        echo "Missing: $missing"
-        echo "  zig: https://ziglang.org/download/"
-        echo "  curl, jq: Install via package manager (e.g., pacman -S curl jq)"
+    if [ -n "$failed" ]; then
+        echo "X Files with non-ASCII:$failed"
         exit 1
     fi
-    echo ""
-    echo "All tools satisfied!"
+    echo "[OK] All .roc files are 7-bit clean"
 
-# Check if we have the latest Roc nightly (returns 0 if up-to-date, 1 if needs update)
-check-nightly:
+# Check if we have the latest Roc nightly
+check-nightly: tools-install
     #!/usr/bin/env bash
     set -e
 
@@ -89,8 +114,166 @@ check-nightly:
         exit 1
     fi
 
+# Clean platform build artifacts
+clean:
+    rm -rf zig-out .zig-cache
+
+# Fetch latest Roc reference docs and update both docs/ and skill references
+fetch-docs: tools-fetch
+    #!/usr/bin/env bash
+    set -e
+    echo "Fetching Roc reference docs from GitHub..."
+    mkdir -p docs
+
+    # Fetch Builtin.roc
+    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/src/build/roc/Builtin.roc \
+        -o docs/Builtin.roc
+    echo "  [OK] docs/Builtin.roc"
+
+    # Fetch all_syntax_test.roc
+    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/test/fx/all_syntax_test.roc \
+        -o docs/all_syntax_test.roc
+    echo "  [OK] docs/all_syntax_test.roc"
+
+    # Update roc-language skill references
+    echo "Updating roc-language skill..."
+    mkdir -p ~/.claude/skills/roc-language/references
+    cp docs/Builtin.roc         ~/.claude/skills/roc-language/references/
+    cp docs/all_syntax_test.roc ~/.claude/skills/roc-language/references/
+    cp docs/ROC_TUTORIAL.md     ~/.claude/skills/roc-language/references/
+    cp docs/ROC_TUTORIAL_CONDENSED.md ~/.claude/skills/roc-language/references/
+    cp docs/ROC_LANGREF_TUTORIAL.md   ~/.claude/skills/roc-language/references/
+    echo "  [OK] ~/.claude/skills/roc-language/references/"
+
+    # Update roc-platform skill references
+    echo "Updating roc-platform skill..."
+    mkdir -p ~/.claude/skills/roc-platform/references
+    cp docs/Builtin.roc ~/.claude/skills/roc-platform/references/
+    echo "  [OK] ~/.claude/skills/roc-platform/references/"
+
+    echo ""
+    echo "[OK] Reference docs updated successfully!"
+    echo "  - docs/Builtin.roc ($(wc -l < docs/Builtin.roc) lines)"
+    echo "  - docs/all_syntax_test.roc ($(wc -l < docs/all_syntax_test.roc) lines)"
+    echo ""
+    echo "Updated skills:"
+    echo "  - roc-language (core syntax and builtins)"
+    echo "  - roc-platform (platform development)"
+
+# Run integration tests (runtime with hosted functions)
+test-integration:
+    roc test/host.roc
+
+# Run module unit tests (roc test)
+test-unit:
+    #!/usr/bin/env bash
+    echo "=== Unit Tests ==="
+    failed=""
+    for module in platform/*.roc; do
+        name=$(basename "$module")
+        result=$(roc test "$module" 2>&1)
+        exitcode=$?
+        # Only show files with tests (skip "All (0) tests passed")
+        if echo "$result" | grep -qv "All (0) tests passed"; then
+            echo "  $name: $result"
+        fi
+        if [ $exitcode -ne 0 ]; then
+            failed="$failed $name"
+        fi
+    done
+    if [ -n "$failed" ]; then
+        echo "X Failed unit tests:$failed"
+        exit 1
+    fi
+    echo "[OK] All unit tests passed"
+
+# Run all tests including Zig (slow - includes FFI boundary tests)
+test-zig: tools-build
+    #!/usr/bin/env bash
+    set -e
+    echo "Running Zig tests..."
+
+    zig build test
+    echo "  [OK] Zig tests passed"
+    echo ""
+
+# fail unless zig is available
+tools-build:
+    #!/usr/bin/env bash
+    if ! command -v zig &> /dev/null; then
+        echo "Missing: zig"
+        echo "  zig: https://ziglang.org/download/"
+        exit 1
+    fi
+
+# fail unless curl is available
+tools-fetch:
+    #!/usr/bin/env bash
+    if ! command -v curl &> /dev/null; then
+        echo "Missing: curl"
+        echo "  curl: Install via package manager (e.g., pacman -S curl)"
+        exit 1
+    fi
+
+# fail unless jq is available
+tools-install: tools-fetch
+    #!/usr/bin/env bash
+    if ! command -v jq &> /dev/null; then
+        echo "Missing: jq"
+        echo "  jq: Install via package manager (e.g., pacman -S jq)"
+        exit 1
+    fi
+
+
+#
+# Workflow Tasks
+# ==============
+
+# zig build native
+build: hygiene tools-build
+    #!/usr/bin/env bash
+    set -e
+    echo "Building Zig platform (native only)..."
+    zig build native -Doptimize=ReleaseSafe
+    just built
+    echo "[OK] Platform built"
+
+# Build all target architectures (for releases)
+build-all: hygiene tools-build
+    #!/usr/bin/env bash
+    set -e
+    echo "Building Zig platform (all targets)..."
+    zig build -Doptimize=ReleaseSafe
+    just built
+    echo "[OK] Platform built (all targets)"
+
+# Build and run tests
+dev: build test
+
+# Clean, build, and run
+fresh: clean dev
+
+# auto-run clean or nuke based on "built" markers
+hygiene:
+    #!/usr/bin/env bash
+    set -e
+    # Pre-checks: clean/nuke when build config or Roc version changed.
+    if [ -f "zig-out/.last-build" ] && \
+       { [ "build.zig" -nt "zig-out/.last-build" ] || [ "build.zig.zon" -nt "zig-out/.last-build" ]; }; then
+        echo "Build configuration changed - cleaning..."
+        just clean
+    fi
+    if command -v roc >/dev/null 2>&1; then
+        current_version=$(roc version)
+        cached_version=$(cat zig-out/.roc-version 2>/dev/null || echo "")
+        if [ -n "$cached_version" ] && [ "$current_version" != "$cached_version" ]; then
+            echo "Roc version changed - nuking cache..."
+            just nuke
+        fi
+    fi
+
 # Fetch and install latest Roc nightly (skips if already up-to-date)
-install-roc: check-tools
+install-roc: tools-install
     #!/usr/bin/env bash
     set -e
 
@@ -189,182 +372,18 @@ install-roc: check-tools
     echo ""
     {{install_root}}/bin/roc version
 
-
-# Note: Zig automatically downloads Roc source (from build.zig.zon)
-
-# Quick native build for local development
-hygiene:
-    #!/usr/bin/env bash
-    set -e
-    # Pre-checks: clean/nuke when build config or Roc version changed.
-    if [ -f "zig-out/.last-build" ] && \
-       { [ "build.zig" -nt "zig-out/.last-build" ] || [ "build.zig.zon" -nt "zig-out/.last-build" ]; }; then
-        echo "Build configuration changed - cleaning..."
-        just clean
-    fi
-    if command -v roc >/dev/null 2>&1; then
-        current_version=$(roc version)
-        cached_version=$(cat zig-out/.roc-version 2>/dev/null || echo "")
-        if [ -n "$cached_version" ] && [ "$current_version" != "$cached_version" ]; then
-            echo "Roc version changed - nuking cache..."
-            just nuke
-        fi
-    fi
-
-built:
-    #!/usr/bin/env bash
-    set -e
-    # Record successful build
-    mkdir -p zig-out
-    if command -v roc >/dev/null 2>&1; then
-        echo "$(roc version)" > zig-out/.roc-version
-    fi
-    touch zig-out/.last-build
-
-build: hygiene
-    #!/usr/bin/env bash
-    set -e
-    echo "Building Zig platform (native only)..."
-    zig build native -Doptimize=ReleaseSafe
-    just built
-    echo "[OK] Platform built"
-
-# Build all target architectures (for releases)
-build-all: hygiene
-    #!/usr/bin/env bash
-    set -e
-    echo "Building Zig platform (all targets)..."
-    zig build -Doptimize=ReleaseSafe
-    just built
-    echo "[OK] Platform built (all targets)"
+# Nuclear option: clean everything including Roc cache
+nuke: clean
+    rm -rf ~/.cache/roc
 
 # One-time full setup
 setup: install-roc build
-
-# Run module unit tests (roc test)
-test-unit:
-    #!/usr/bin/env bash
-    echo "=== Unit Tests ==="
-    failed=""
-    for module in platform/*.roc; do
-        name=$(basename "$module")
-        result=$(roc test "$module" 2>&1)
-        exitcode=$?
-        # Only show files with tests (skip "All (0) tests passed")
-        if echo "$result" | grep -qv "All (0) tests passed"; then
-            echo "  $name: $result"
-        fi
-        if [ $exitcode -ne 0 ]; then
-            failed="$failed $name"
-        fi
-    done
-    if [ -n "$failed" ]; then
-        echo "X Failed unit tests:$failed"
-        exit 1
-    fi
-    echo "[OK] All unit tests passed"
-
-# Run integration tests (runtime with hosted functions)
-test-integration:
-    roc test/host.roc
 
 # Run all Roc tests (unit + integration)
 test: test-unit test-integration
 
 # Run all tests
-test-all: test test-debug
+test-all: test test-zig
 
-# Check all .roc files are 7-bit clean (ASCII only, UTF-8 compatible)
-check-ascii:
-    #!/usr/bin/env bash
-    echo "=== Checking for 7-bit clean files ==="
-    has_non_ascii() {
-        local file="$1"
-        if command -v rg >/dev/null 2>&1; then
-            rg -q --pcre2 '[^\x00-\x7F]' "$file"
-            return $?
-        fi
-        # BusyBox-compatible fallback: strip ASCII bytes, check if anything remains.
-        if LC_ALL=C tr -d '\000-\177' < "$file" | head -c 1 | grep -q .; then
-            return 0
-        fi
-        return 1
-    }
-    failed=""
-    for f in platform/*.roc test/*.roc; do
-        if has_non_ascii "$f"; then
-            echo "  $f: contains non-ASCII bytes"
-            failed="$failed $f"
-        fi
-    done
-    if [ -n "$failed" ]; then
-        echo "X Files with non-ASCII:$failed"
-        exit 1
-    fi
-    echo "[OK] All .roc files are 7-bit clean"
-
-# Run all tests including Zig (slow - includes FFI boundary tests)
-test-debug:
-    #!/usr/bin/env bash
-    set -e
-    echo "Running Zig tests..."
-
-    zig build test
-    echo "  [OK] Zig tests passed"
-    echo ""
-
-# Build and run tests
-dev: build test
-
-# Clean platform build artifacts
-clean:
-    rm -rf zig-out .zig-cache
-
-# Nuclear option: clean everything including Roc cache
-nuke: clean
-    rm -rf ~/.cache/roc
-
-# Clean, build, and run
-fresh: clean dev
-
-# Fetch latest Roc reference docs and update both docs/ and skill references
-fetch-docs:
-    #!/usr/bin/env bash
-    set -e
-    echo "Fetching Roc reference docs from GitHub..."
-    mkdir -p docs
-
-    # Fetch Builtin.roc
-    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/src/build/roc/Builtin.roc \
-        -o docs/Builtin.roc
-    echo "  [OK] docs/Builtin.roc"
-
-    # Fetch all_syntax_test.roc
-    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/test/fx/all_syntax_test.roc \
-        -o docs/all_syntax_test.roc
-    echo "  [OK] docs/all_syntax_test.roc"
-
-    # Update roc-language skill references
-    echo "Updating roc-language skill..."
-    mkdir -p ~/.claude/skills/roc-language/references
-    cp docs/Builtin.roc         ~/.claude/skills/roc-language/references/
-    cp docs/all_syntax_test.roc ~/.claude/skills/roc-language/references/
-    cp docs/ROC_TUTORIAL.md     ~/.claude/skills/roc-language/references/
-    cp docs/ROC_TUTORIAL_CONDENSED.md ~/.claude/skills/roc-language/references/
-    cp docs/ROC_LANGREF_TUTORIAL.md   ~/.claude/skills/roc-language/references/
-    echo "  [OK] ~/.claude/skills/roc-language/references/"
-
-    # Update roc-platform skill references
-    echo "Updating roc-platform skill..."
-    mkdir -p ~/.claude/skills/roc-platform/references
-    cp docs/Builtin.roc ~/.claude/skills/roc-platform/references/
-    echo "  [OK] ~/.claude/skills/roc-platform/references/"
-
-    echo ""
-    echo "[OK] Reference docs updated successfully!"
-    echo "  - docs/Builtin.roc ($(wc -l < docs/Builtin.roc) lines)"
-    echo "  - docs/all_syntax_test.roc ($(wc -l < docs/all_syntax_test.roc) lines)"
-    echo ""
-    echo "Updated skills:"
-    echo "  - roc-language (core syntax and builtins)"
-    echo "  - roc-platform (platform development)"
+# Fail unless all tools are available
+tools-all: tools-build tools-install
