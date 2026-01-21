@@ -255,22 +255,23 @@ fresh: clean dev
 hygiene:
     #!/usr/bin/env bash
     set -e
-    # Pre-checks: clean/nuke when build config or Roc version changed.
-    if [ -f "zig-out/.last-build" ] && \
-       { [ "build.zig" -nt "zig-out/.last-build" ] || [ "build.zig.zon" -nt "zig-out/.last-build" ]; }; then
-        echo "Build configuration changed - cleaning..."
-        just clean
-    fi
+    # Pre-checks: nuke first on Roc version change, else clean on config change.
     if command -v roc >/dev/null 2>&1; then
         current_version=$(roc version)
         cached_version=$(cat zig-out/.roc-version 2>/dev/null || echo "")
         if [ -n "$cached_version" ] && [ "$current_version" != "$cached_version" ]; then
             echo "Roc version changed - nuking cache..."
             just nuke
+            exit 0 # nothing more to do after a nuke
         fi
     fi
+    if [ -f "zig-out/.last-build" ] && \
+       { [ "build.zig" -nt "zig-out/.last-build" ] || [ "build.zig.zon" -nt "zig-out/.last-build" ]; }; then
+        echo "Build configuration changed - cleaning..."
+        just clean
+    fi
 
-# Fetch Builtin.roc with ETag cache
+# Fetch Builtin.roc and all_syntax_test.roc using ETag caching
 fetch-docs: tools-fetch
     #!/usr/bin/env bash
     set -e
