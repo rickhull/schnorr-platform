@@ -20,6 +20,9 @@ app
 
 host/libhost.h
 
+tmp/
+cache/
+
 zig-cache/
 zig-out/
 build
