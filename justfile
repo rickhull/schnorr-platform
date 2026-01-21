@@ -3,6 +3,8 @@
 # Configuration
 install_root := env_var_or_default("HOME", "") + "/.local"
 platform_dir := "platform"
+curl_cmd := "curl -L -s -S"
+curl_cmd_cache := curl_cmd + " -z" 
 
 # Unit Tasks (no dependencies, no invocations)
 # ---
@@ -10,7 +12,8 @@ platform_dir := "platform"
 # check-ascii      - Check all .roc files are 7-bit clean
 # check-nightly    - Check if Roc nightly is up-to-date
 # clean            - Remove platform build artifacts
-# fetch-docs       - Update Roc reference docs and Claude skills
+# prune-roc        - Keep latest 3 Roc nightly cache entries
+# skill-docs       - Copy docs/ into Claude skill references
 # test-integration - Run integration tests (hosted functions)
 # test-unit        - Run module unit tests (roc test)
 # test-zig         - Run zig tests, slow
@@ -22,15 +25,18 @@ platform_dir := "platform"
 # build         - Build native (hygiene built)
 # build-all     - Build all targets (hygiene built)
 # dev           - (build test)
+# fetch-docs    - Fetch Roc reference docs with ETag cache
 # fresh         - (clean dev)
 # hygiene       - Conditional (clean nuke)
+# fetch-roc     - Fetch roc-nightly to cache/ (tools-install)
 # install-roc   - (check-nightly)
 # nuke          - (clean)
 # setup         - (install-roc build-all)
 # test          - (test-unit test-integration)
-# test-all      - (test + test-zig)
+# test-all      - (test test-zig)
 # tools-install - Verify jq is available (tools-fetch)
-# tools-all     - (tools-build, tools-install)
+# tools-all     - (tools-build tools-install)
+# update-docs   - (fetch-docs skill-docs)
 
 
 #
@@ -83,7 +89,7 @@ check-nightly: tools-install
     set -e
 
     # Get latest release info from GitHub API
-    release_info=$(curl -s https://api.github.com/repos/roc-lang/nightlies/releases/latest)
+    release_info=$({{curl_cmd}} https://api.github.com/repos/roc-lang/nightlies/releases/latest)
     tag_name=$(echo "$release_info" | jq -r '.tag_name')
 
     if [ -z "$tag_name" ] || [ "$tag_name" = "null" ]; then
@@ -118,24 +124,26 @@ check-nightly: tools-install
 clean:
     rm -rf zig-out .zig-cache
 
-# Fetch latest Roc reference docs and update both docs/ and skill references
-fetch-docs: tools-fetch
+# Prune Roc nightly cache to 3 most recent entries
+prune-roc:
     #!/usr/bin/env bash
     set -e
-    echo "Fetching Roc reference docs from GitHub..."
-    mkdir -p docs
+    cache_dir="cache/roc-nightly"
+    if [ ! -d "$cache_dir" ]; then
+        exit 0
+    fi
+    stale_dirs=$(ls -dt "$cache_dir"/nightly-* 2>/dev/null | tail -n +4)
+    if [ -z "$stale_dirs" ]; then
+        exit 0
+    fi
+    echo "$stale_dirs" | while read -r dir; do
+        rm -rf "$dir"
+    done
 
-    # Fetch Builtin.roc
-    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/src/build/roc/Builtin.roc \
-        -o docs/Builtin.roc
-    echo "  [OK] docs/Builtin.roc"
-
-    # Fetch all_syntax_test.roc
-    curl -s https://raw.githubusercontent.com/roc-lang/roc/main/test/fx/all_syntax_test.roc \
-        -o docs/all_syntax_test.roc
-    echo "  [OK] docs/all_syntax_test.roc"
-
-    # Update roc-language skill references
+# Copy docs/ into Claude skill references
+skill-docs:
+    #!/usr/bin/env bash
+    set -e
     echo "Updating roc-language skill..."
     mkdir -p ~/.claude/skills/roc-language/references
     cp docs/Builtin.roc         ~/.claude/skills/roc-language/references/
@@ -145,20 +153,10 @@ fetch-docs: tools-fetch
     cp docs/ROC_LANGREF_TUTORIAL.md   ~/.claude/skills/roc-language/references/
     echo "  [OK] ~/.claude/skills/roc-language/references/"
 
-    # Update roc-platform skill references
     echo "Updating roc-platform skill..."
     mkdir -p ~/.claude/skills/roc-platform/references
     cp docs/Builtin.roc ~/.claude/skills/roc-platform/references/
     echo "  [OK] ~/.claude/skills/roc-platform/references/"
-
-    echo ""
-    echo "[OK] Reference docs updated successfully!"
-    echo "  - docs/Builtin.roc ($(wc -l < docs/Builtin.roc) lines)"
-    echo "  - docs/all_syntax_test.roc ($(wc -l < docs/all_syntax_test.roc) lines)"
-    echo ""
-    echo "Updated skills:"
-    echo "  - roc-language (core syntax and builtins)"
-    echo "  - roc-platform (platform development)"
 
 # Run integration tests (runtime with hosted functions)
 test-integration:
@@ -272,34 +270,44 @@ hygiene:
         fi
     fi
 
-# Fetch and install latest Roc nightly (skips if already up-to-date)
-install-roc: tools-install
+# Fetch Builtin.roc with ETag cache
+fetch-docs: tools-fetch
     #!/usr/bin/env bash
     set -e
+    cache_dir="cache/roc-docs"
+    mkdir -p "$cache_dir" docs
+    etag_file="$cache_dir/Builtin.roc.etag"
 
-    # Check if we already have the latest version (exit early if so)
-    check_output=$(just check-nightly 2>&1 || true)
-    if echo "$check_output" | grep -q "[OK] Roc"; then
-        echo "$check_output" | grep "[OK] Roc"
-        exit 0
-    fi
+    status=$({{curl_cmd}} https://raw.githubusercontent.com/roc-lang/roc/main/src/build/roc/Builtin.roc \
+        -o docs/Builtin.roc \
+        --etag-save "$etag_file" \
+        --etag-compare "$etag_file" \
+        -w "%{http_code}")
+    echo "  Builtin.roc: $status"
 
-    echo "Fetching latest Roc nightly release info..."
+    etag_file="$cache_dir/all_syntax_test.roc.etag"
+    status=$({{curl_cmd}} https://raw.githubusercontent.com/roc-lang/roc/main/test/fx/all_syntax_test.roc \
+        -o docs/all_syntax_test.roc \
+        --etag-save "$etag_file" \
+        --etag-compare "$etag_file" \
+        -w "%{http_code}")
+    echo "  all_syntax_test.roc: $status"
+
+# Fetch latest Roc nightly into cache/
+fetch-roc: tools-install
+    #!/usr/bin/env bash
+    set -e
+    cache_dir="cache/roc-nightly"
+    mkdir -p "$cache_dir"
 
     # Get latest release info from GitHub API
-    release_info=$(curl -s https://api.github.com/repos/roc-lang/nightlies/releases/latest)
+    release_info=$({{curl_cmd}} https://api.github.com/repos/roc-lang/nightlies/releases/latest)
     tag_name=$(echo "$release_info" | jq -r '.tag_name')
 
     if [ -z "$tag_name" ] || [ "$tag_name" = "null" ]; then
         echo "Error: Could not fetch latest release info"
         exit 1
     fi
-
-    echo "Installing $tag_name..."
-
-    # Extract date from tag (format: nightly-2026-January-15-41b76c3)
-    date_part=$(echo "$tag_name" | sed 's/nightly-//' | cut -d'-' -f1-3)
-    commit=$(echo "$tag_name" | sed 's/.*-//')
 
     # Detect platform/arch for filename (best-effort, fail fast if unknown)
     os_name=$(uname -s)
@@ -314,6 +322,10 @@ install-roc: tools-install
         arm64|aarch64) arch="arm64" ;;
         *) echo "Error: Unsupported arch '$arch_name' for Roc nightly install"; exit 1 ;;
     esac
+
+    # Extract date from tag (format: nightly-2026-January-15-41b76c3)
+    date_part=$(echo "$tag_name" | sed 's/nightly-//' | cut -d'-' -f1-3)
+    commit=$(echo "$tag_name" | sed 's/.*-//')
 
     # Construct filename (format: roc_nightly-linux_x86_64-2026-01-15-41b76c3.tar.gz)
     # Need to convert January -> 01, parse the date
@@ -340,15 +352,56 @@ install-roc: tools-install
 
     filename="roc_nightly-${platform}_${arch}-$numeric_date-$commit.tar.gz"
     download_url="https://github.com/roc-lang/nightlies/releases/download/$tag_name/$filename"
+    tag_dir="$cache_dir/$tag_name"
+    tarball="$tag_dir/$filename"
 
-    echo "Downloading $filename..."
+    if [ -f "$tarball" ]; then
+        echo "[OK] Cached: $tarball"
+    else
+        echo "Downloading $filename..."
+        mkdir -p "$tag_dir"
+        {{curl_cmd}} "$download_url" -o "$tarball"
+    fi
+
+    echo "$tag_name" > "$cache_dir/LATEST"
+    echo "[OK] Cached nightly: $tag_name"
+
+# Fetch and install latest Roc nightly (skips if already up-to-date)
+install-roc: tools-install fetch-roc
+    #!/usr/bin/env bash
+    set -e
+
+    # Check if we already have the latest version (exit early if so)
+    check_output=$(just check-nightly 2>&1 || true)
+    if echo "$check_output" | grep -q "[OK] Roc"; then
+        echo "$check_output" | grep "[OK] Roc"
+        exit 0
+    fi
+
+    cache_dir="cache/roc-nightly"
+    tag_name="${1:-}"
+    if [ -z "$tag_name" ]; then
+        if [ ! -f "$cache_dir/LATEST" ]; then
+            just fetch-roc
+        fi
+        tag_name=$(cat "$cache_dir/LATEST")
+    fi
+
+    tag_dir="$cache_dir/$tag_name"
+    tarball=$(ls "$tag_dir"/*.tar.gz 2>/dev/null | head -1)
+    if [ -z "$tarball" ]; then
+        echo "Error: No cached nightly for tag '$tag_name'"
+        echo "  Run: just fetch-roc"
+        exit 1
+    fi
+
+    echo "Installing $tag_name..."
     tmpdir=$(mktemp -d -t roc-install 2>/dev/null || mktemp -d /tmp/roc-install.XXXXXX)
     trap 'rm -rf "$tmpdir"' EXIT
-    curl -L "$download_url" -o "$tmpdir/$filename"
 
     echo "Extracting to {{install_root}}/bin..."
     mkdir -p {{install_root}}/bin
-    tar -xzf "$tmpdir/$filename" -C "$tmpdir"
+    tar -xzf "$tarball" -C "$tmpdir"
 
     # Find the extracted directory (should be roc_nightly-linux_x86_64-DATE-HASH)
     extracted_dir=$(find "$tmpdir" -maxdepth 1 -type d -name "roc_nightly-*" | head -1)
@@ -371,6 +424,7 @@ install-roc: tools-install
     echo "  export PATH=\"{{install_root}}/bin:\$PATH\""
     echo ""
     {{install_root}}/bin/roc version
+    just prune-roc
 
 # Nuclear option: clean everything including Roc cache
 nuke: clean
@@ -387,3 +441,6 @@ test-all: test test-zig
 
 # Fail unless all tools are available
 tools-all: tools-build tools-install
+
+# Fetch docs then update skill references
+update-docs: fetch-docs skill-docs
