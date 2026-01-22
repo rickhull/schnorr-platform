@@ -2,214 +2,109 @@
 
 Common ripgrep commands for searching the codebase.
 
-## Essential Patterns
+## Platform Architecture
 
-### secp256k1 Cryptography
+### Find Hosted Functions
 ```bash
-# Find all secp256k1 function calls
-rg "secp256k1_secp256k1_context_create" platform/host.zig
-rg "secp256k1_keypair_create" platform/host.zig
-rg "secp256k1_schnorrsig_sign32" platform/host.zig
-rg "secp256k1_schnorrsig_verify" platform/host.zig
+# All hosted function implementations (Zig side)
+rg "fn hostedHost" platform/host.zig -A 3
+rg "fn hostedStd" platform/host.zig -A 3
+
+# Host module API (Roc side)
+rg "^    [a-z]+! :" platform/Host.roc
 ```
 
-### Roc Types & Memory
-```zig
-# Find RocList operations
-rg "RocList\." platform/host.zig
-rg "RocList\.allocateExact\|RocList\.empty" platform/host.zig -n
-
-# Find RocStr operations
-rg "RocStr\." platform/host.zig
-rg "RocStr\.init\|RocStr\.empty" platform/host.zig
-```
-
-### Roc Function Patterns
+### Find Module Definitions
 ```bash
-# Find all hosted function definitions
-rg "fn hostedHost" platform/host.zig -n
-rg "\"Host\":"\"" -A 5 platform/
+# All wrapper type modules (use nominal tag unions)
+rg "^[A-Z][a-zA-Z]+ := \[" platform/*.roc
 
-# Find function return patterns
-rg "return.*RocList" platform/host.zig
-rg "return.*RocStr" platform/host.zig
-rg "return.*\\*[U8|Bool|I32]" platform/host.zig
+# Find create methods (type constructors)
+rg "create : List\(U8\)" platform/*.roc
+
+# Find bytes methods (FFI unwrap)
+rg "bytes : [A-Z][a-zA-Z]+ -> List\(U8\)" platform/*.roc
 ```
 
-### Error Handling
+### Platform Coupling (CRITICAL)
 ```bash
-# Find empty list/error patterns
-rg "return.*RocList\.empty" platform/
-rg "return.*RocStr\.empty" platform/
-rg "return.*0.*=.*1" platform/  # Bool.false patterns
+# Check exposes list order (main.roc)
+rg "exposes \[" platform/main.roc -A 1
 
-# Find Result/Tag patterns
-rg "Err\." test/
-rg "Ok\." test/
-rg "\"[A-Za-z]+\\.\"" test/
+# Check hosted_function_ptrs order (host.zig)
+rg "hosted_function_ptrs = \[" platform/host.zig -A 10
 ```
 
-### Test Patterns
-```bash
-# Find test declarations
-rg "test \"|\"check\"" test/
-rg "b\.addTest" build.zig
-
-# Find test assertions
-rg "try testing\expectEqual\|expect" test/ -A 2
-
-# Find test functions
-rg "fn \"test.*\"(" test/
-```
+## Type Operations
 
 ### List Operations
 ```bash
-# Find List operations
-rg "List\\.len\|List\\.get\|List\\.allocateExact" platform/
-rg "List\\.append\|List\\.map\|List\\.keep_if" test/ -n
+# List.len validation patterns
+rg "List\.len" platform/*.roc
+
+# List construction patterns
+rg "List\.repeat|List\.pad" platform/ test/
 ```
 
-### Number Types
+### Result/Try Types
 ```bash
-# Find numeric type annotations
-rg ": U64\|: I32\|: Bool\|: List U8" --line-number
+# Find Result constructors
+rg "Ok\(|Err\(" test/
+
+# Find Try types (new compiler)
+rg "Try\(" platform/*.roc
 ```
 
-## Common Options
+## Common Searches
 
-### Basic Options
+### Find All Module Uses
 ```bash
-rg "pattern"                  # Basic search
-rg "pattern" -n                # Show line numbers
-rg "pattern" -C 3              # 3 lines of context
-rg "pattern" -C 5              # 5 lines of context
+# Host function calls
+rg "Host\.[a-z]+!" examples/
+
+# Type wrapper usage
+rg "(PublicKey|SecretKey|Signature|Digest)\." examples/
+
+# Stdout calls
+rg "Stdout\.line!" examples/
 ```
 
-### Search Inverse
+### Find Validation Logic
 ```bash
-rg -v "pattern" path/           # Find non-matching lines
+# Length checks
+rg "match List\.len" platform/*.roc
+
+# InvalidLength errors
+rg "InvalidLength" platform/*.roc
 ```
 
-### Count Matches
+### FFI Boundary Patterns
 ```bash
-rg "pattern" --count           # Count matches
-rg "pattern" --stats           # Detailed match stats
+# All RocList allocations
+rg "RocList\.allocateExact" platform/host.zig
+
+# Empty returns (error handling)
+rg "RocList\.empty\(\)" platform/host.zig
+
+# Bool returns
+rg "result\.* = 0|result\.* = 1" platform/host.zig
 ```
 
-### Search Specific Files
+## Quick Reference
+
 ```bash
-rg "pattern" platform/           # Only search in platform/
-rg "pattern" test/              # Only search in test/
-rg "pattern" *.roc               # Only search .roc files
-rg "pattern" *.zig              # Only search .zig files
-```
+# Show line numbers
+rg "pattern" -n
 
-## Project-Specific Searches
+# Context (3 lines before/after)
+rg "pattern" -C 3
 
-### Find All Host Functions
-```bash
-rg "fn hostedHost" platform/host.zig -A 3
-rg "fn hostedSha256" platform/host.zig -A 3
-rg "fn hostedStd" platform/ -A 2
-```
+# Search specific directory
+rg "pattern" platform/
 
-### Find Module Implementations
-```zig
-# Find Host module (index 0)
-rg "\"Host\":"\"" -A 20 platform/host.zig
+# Count matches
+rg "pattern" --count
 
-# Find Sha256 module (index 1)
-rg "\"Sha256\":"\"" -A 10 platform/
-```
-
-### Find secp256k1 Context
-```bash
-rg "secp256k1_ctx\|secp256k1_context" platform/host.zig
-```
-
-### Find API Surface
-```roc
-# Find all Host function calls in examples
-rg "Host\\..*!" examples/
-
-# Find Host function definitions in platform/
-rg "\"fn\"Host\\.pubkey!|sign!|verify!\"" platform/
-```
-
-### Find TODO/FIXME
-```bash
-rg "TODO|FIXME|XXX|HACK|TEMP" --line-number
-```
-
-### Find Compilation/Build Artifacts
-```bash
-rg "zig-out|\\.zig-cache|\\.cache" --exclude-dir
-```
-
-### Find Debug Output
-```bash
-rg "Stdout\.line|dbg|print" platform/
-```
-
-## Complex Patterns
-
-### Multi-pattern search
-```bash
-rg "secret_key|digest|pubkey|signature" platform/host.zig
-```
-
-### Pattern with context
-```bash
-rg -C 5 "RocList\.empty" platform/host.zig
-rg -B 2 "RocList\.empty" platform/host.zig
-```
-
-### Regex with ripgrep
-```bash
-# Find Result types
-rg "Err\\(" test/
-
-# Find specific error tags
-rg "Err\\(" test/
-```
-
-## Optimization
-
-For very large codebases:
-```bash
-# Use ripgrep with hyperfine
-rg "pattern" --hyperfine "build.zig"  # Faster on large files
-
-# Use ripgrep with PCRE2 patterns
-rg "secret_key\\d+" -P    # Regex patterns
-
-# Use ripgrep with literal string matching
-rg "secret_key" --type js          # JavaScript files
-rg "secret_key" --type zig         # Zig files
-```
-
-## Workflow Commands
-
-### Before changing APIs
-```bash
-# Find all callers of a function before refactoring
-rg "my_function(" --exclude-dir=test/ -A 2
-
-# Find all function definitions
-rg "^fn my_function" -A 5
-```
-
-### Search for deprecated patterns
-```bash
-# Find Result/Status patterns that should be simple types
-rg "Result\\.ok|Result\\.err" --exclude-dir=docs/
-
-# Find complex conditionals that could be simplified
-rg "match.*is.*=>.*is.*=>" test/
-```
-
-### Validate code consistency
-```bash
-# Ensure all function names match module conventions
-rg "\"fn [a-z_]+!" --exclude-dir=test/ | rg "\"fn [a-z_]+\"" | grep -v "test\\|spec\\|example"
+# Inverse search (lines NOT matching)
+rg "pattern" -v
 ```
