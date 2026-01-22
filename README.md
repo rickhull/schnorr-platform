@@ -19,12 +19,14 @@ Perfect for building Nostr clients, relays, or bots in Roc.
 ## Quick Start
 
 ```bash
-# Install Roc and build platform
-just setup
+# Build platform (requires Roc and Zig)
+just build
 
 # Run example
 roc examples/pubkey.roc
 ```
+
+**Prerequisites:** Roc nightly (installed via `roc-init`), Zig (0.15.2+)
 
 ## Commands
 
@@ -35,13 +37,16 @@ roc examples/pubkey.roc
 | `bundle` | Create distributable platform package | `build-all` | - |
 | `clean` | Remove platform build artifacts | - | - |
 | `dev` | Build and run tests | - | `build`, `test` |
-| `nuke` | Clean everything including Roc cache | - | `clean` |
-| `setup` | One-time full setup | - | `install-roc`, `build-all` |
+| `fresh` | Clean, build, and run | - | `clean`, `dev` |
+| `nuke` | Clean everything including platform cache | - | `clean` |
 | `test` | Run Roc tests (unit + integration) | - | `test-unit`, `test-integration` |
 | `test-all` | Run all tests including Zig | `test` | `test-zig` |
 | `test-integration` | Run integration tests (runtime) | - | - |
 | `test-unit` | Run module unit tests (roc test) | - | - |
+| `test-integration` | Run integration tests (runtime) | - | - |
 | `test-zig` | Run Zig tests (FFI boundaries) | `tools-build` | - |
+
+**Workflow:** Use `roc-init` to set up Roc, then clone schnorr-platform and run `just build`.
 
 ## Example: Nostr Key Pair
 
