@@ -13,7 +13,6 @@ curl_cmd_cache := curl_cmd + " -z"
 # check-nightly    - Check if Roc nightly is up-to-date
 # clean            - Remove platform build artifacts
 # prune-roc        - Keep latest 3 Roc nightly cache entries
-# skill-docs       - Copy docs/ into Claude skill references
 # test-integration - Run integration tests (hosted functions)
 # test-unit        - Run module unit tests (roc test)
 # test-zig         - Run zig tests, slow
@@ -26,7 +25,6 @@ curl_cmd_cache := curl_cmd + " -z"
 # build-all     - Build all targets (hygiene built)
 # bundle        - Create distributable platform package (build-all)
 # dev           - (build test)
-# fetch-docs    - Fetch Roc reference docs with ETag cache
 # fresh         - (clean dev)
 # hygiene       - Conditional (clean nuke)
 # fetch-roc     - Fetch roc-nightly to cache/ (tools-install)
@@ -37,7 +35,6 @@ curl_cmd_cache := curl_cmd + " -z"
 # test-all      - (test test-zig)
 # tools-install - Verify jq is available (tools-fetch)
 # tools-all     - (tools-build tools-install)
-# update-docs   - (fetch-docs skill-docs)
 
 
 #
@@ -140,24 +137,6 @@ prune-roc:
     echo "$stale_dirs" | while read -r dir; do
         rm -rf "$dir"
     done
-
-# Copy docs/ into Claude skill references
-skill-docs:
-    #!/usr/bin/env bash
-    set -e
-    echo "Updating roc-language skill..."
-    mkdir -p ~/.claude/skills/roc-language/references
-    cp docs/Builtin.roc         ~/.claude/skills/roc-language/references/
-    cp docs/all_syntax_test.roc ~/.claude/skills/roc-language/references/
-    cp docs/ROC_TUTORIAL.md     ~/.claude/skills/roc-language/references/
-    cp docs/ROC_TUTORIAL_CONDENSED.md ~/.claude/skills/roc-language/references/
-    cp docs/ROC_LANGREF_TUTORIAL.md   ~/.claude/skills/roc-language/references/
-    echo "  [OK] ~/.claude/skills/roc-language/references/"
-
-    echo "Updating roc-platform skill..."
-    mkdir -p ~/.claude/skills/roc-platform/references
-    cp docs/Builtin.roc ~/.claude/skills/roc-platform/references/
-    echo "  [OK] ~/.claude/skills/roc-platform/references/"
 
 # Run integration tests (runtime with hosted functions)
 test-integration:
@@ -297,29 +276,6 @@ hygiene:
         echo "Build configuration changed - cleaning..."
         just clean
     fi
-
-# Fetch Builtin.roc and all_syntax_test.roc using ETag caching
-fetch-docs: tools-fetch
-    #!/usr/bin/env bash
-    set -e
-    cache_dir="cache/roc-docs"
-    mkdir -p "$cache_dir" docs
-    etag_file="$cache_dir/Builtin.roc.etag"
-
-    status=$({{curl_cmd}} https://raw.githubusercontent.com/roc-lang/roc/main/src/build/roc/Builtin.roc \
-        -o docs/Builtin.roc \
-        --etag-save "$etag_file" \
-        --etag-compare "$etag_file" \
-        -w "%{http_code}")
-    echo "  Builtin.roc: $status"
-
-    etag_file="$cache_dir/all_syntax_test.roc.etag"
-    status=$({{curl_cmd}} https://raw.githubusercontent.com/roc-lang/roc/main/test/fx/all_syntax_test.roc \
-        -o docs/all_syntax_test.roc \
-        --etag-save "$etag_file" \
-        --etag-compare "$etag_file" \
-        -w "%{http_code}")
-    echo "  all_syntax_test.roc: $status"
 
 # Fetch latest Roc nightly into cache/
 fetch-roc: tools-install
@@ -469,6 +425,3 @@ test-all: test test-zig
 
 # Fail unless all tools are available
 tools-all: tools-build tools-install
-
-# Fetch docs then update skill references
-update-docs: fetch-docs skill-docs
