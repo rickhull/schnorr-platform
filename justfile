@@ -1,4 +1,4 @@
-# Justfile for nostr-platform
+# Justfile for schnorr-platform
 
 # Configuration
 install_root := env_var_or_default("HOME", "") + "/.local"

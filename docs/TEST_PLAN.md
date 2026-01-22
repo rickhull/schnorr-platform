@@ -1,4 +1,4 @@
-# nostr-platform Test Plan
+# schnorr-platform Test Plan
 
 > **See also:** [TEST_TYPES.md](TEST_TYPES.md) for detailed documentation of Roc and Zig testing concepts.
 

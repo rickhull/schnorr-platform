@@ -1,4 +1,4 @@
-# nostr-platform
+# schnorr-platform
 
 > **⚠️ IMPORTANT: This project uses the NEW Roc compiler (nightly) with different syntax than documented on roc-lang.org**
 >
@@ -15,7 +15,7 @@
 
 ## Overview
 
-This project provides a Roc platform that exposes cryptographic primitives via FFI bindings to `libsecp256k1`. It enables Nostr applications to perform:
+This project provides a Roc platform that exposes cryptographic primitives via FFI bindings to `libsecp256k1`. It enables applications to perform:
 
 - SHA-256 hashing
 - BIP-340 Schnorr signing
@@ -68,8 +68,8 @@ brew install zig
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-repo/nostr-platform.git
-cd nostr-platform
+git clone https://github.com/your-repo/schnorr-platform.git
+cd schnorr-platform
 ```
 
 2. Run setup:

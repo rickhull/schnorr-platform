@@ -1,4 +1,4 @@
-# Test Types in nostr-platform
+# Test Types in schnorr-platform
 
 This document explains the different testing approaches used in this project, covering both Roc and Zig testing strategies.
 

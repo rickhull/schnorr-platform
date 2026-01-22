@@ -1,4 +1,4 @@
-///! nostr-platform: Roc host implementation for Nostr cryptographic operations
+///! schnorr-platform: Roc host implementation for Schnorr cryptographic operations
 ///!
 ///! This file provides the Zig side of a Roc platform, implementing:
 ///!   - Host module: secp256k1 Schnorr signing, verification, pubkey derivation (BIP-340)

@@ -1,4 +1,4 @@
-# Ripgrep Patterns for nostr-platform
+# Ripgrep Patterns for schnorr-platform
 
 Common ripgrep commands for searching the codebase.
 
