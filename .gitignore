@@ -22,6 +22,7 @@ host/libhost.h
 
 tmp/
 cache/
+dist/
 
 zig-cache/
 zig-out/

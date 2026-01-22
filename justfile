@@ -24,6 +24,7 @@ curl_cmd_cache := curl_cmd + " -z"
 # ---
 # build         - Build native (hygiene built)
 # build-all     - Build all targets (hygiene built)
+# bundle        - Create distributable platform package (build-all)
 # dev           - (build test)
 # fetch-docs    - Fetch Roc reference docs with ETag cache
 # fresh         - (clean dev)
@@ -244,6 +245,32 @@ build-all: hygiene tools-build
     zig build -Doptimize=ReleaseSafe
     just built
     echo "[OK] Platform built (all targets)"
+
+# Bundle platform for distribution (builds all targets first)
+bundle: build-all
+    #!/usr/bin/env bash
+    set -e
+    echo "Bundling platform for distribution..."
+
+    mkdir -p dist
+
+    # Collect all .roc files from platform/
+    roc_files=(platform/*.roc)
+
+    # Collect all compiled libraries from targets/
+    lib_files=()
+    for lib in platform/targets/*/*.a platform/targets/*/*.o platform/targets/*/*.lib; do
+        if [[ -f "$lib" ]]; then
+            lib_files+=("$lib")
+        fi
+    done
+
+    echo "Found ${#roc_files[@]} .roc files and ${#lib_files[@]} library files"
+
+    # Create bundle
+    roc bundle "${roc_files[@]}" "${lib_files[@]}" --output-dir dist
+
+    echo "[OK] Platform bundle created in dist/"
 
 # Build and run tests
 dev: build test
