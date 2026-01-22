@@ -2,9 +2,7 @@
 
 # Configuration
 install_root := env_var_or_default("HOME", "") + "/.local"
-platform_dir := "platform"
-curl_cmd := "curl -L -s -S"
-curl_cmd_cache := curl_cmd + " -z" 
+curl_cmd := "curl -L -s -S" 
 
 # Unit Tasks (no dependencies, no invocations)
 # ---
