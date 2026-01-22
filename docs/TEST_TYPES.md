@@ -34,7 +34,7 @@ app [main!] { pf: platform "./platform/main.roc" }
 import pf.Host
 
 main! = |_args| {
-    secret_key = List.pad(32, 0)
+    secret_key = List.repeat(0, 32)
 
     # expect inside block = runtime assertion
     pubkey = Host.pubkey!(secret_key)

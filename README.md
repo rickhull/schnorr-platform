@@ -53,7 +53,7 @@ import pf.Host
 
 main! = |_args| {
     # Your Nostr secret key (32 bytes)
-    secret_key = List.pad(32, 0)
+    secret_key = List.repeat(0, 32)
 
     # Derive your npub (public key)
     npub = Host.pubkey!(secret_key)
