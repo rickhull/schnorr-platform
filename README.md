@@ -26,6 +26,23 @@ just setup
 roc examples/pubkey.roc
 ```
 
+## Commands
+
+| Task | Description | Depends | Invokes |
+|------|-------------|---------|---------|
+| `build` | Build native platform | `hygiene` | - |
+| `build-all` | Build all target architectures | `hygiene` | - |
+| `bundle` | Create distributable platform package | `build-all` | - |
+| `clean` | Remove platform build artifacts | - | - |
+| `dev` | Build and run tests | - | `build`, `test` |
+| `nuke` | Clean everything including Roc cache | - | `clean` |
+| `setup` | One-time full setup | - | `install-roc`, `build-all` |
+| `test` | Run Roc tests (unit + integration) | - | `test-unit`, `test-integration` |
+| `test-all` | Run all tests including Zig | `test` | `test-zig` |
+| `test-integration` | Run integration tests (runtime) | - | - |
+| `test-unit` | Run module unit tests (roc test) | - | - |
+| `test-zig` | Run Zig tests (FFI boundaries) | `tools-build` | - |
+
 ## Example: Nostr Key Pair
 
 ```roc
@@ -74,38 +91,7 @@ This is a **Roc platform** providing BIP-340 Schnorr cryptographic operations vi
 
 **Key architectural concept:** This is a "platform" - not an application or library. Roc apps link against it as `app [main!] { pf: platform "./platform/main.roc" }` and call hosted functions like `Host.pubkey!(secret_key)`.
 
-## Build & Test Commands
-
-```bash
-# One-time setup (installs Roc, builds platform)
-just setup
-
-# Build platform for native architecture
-just build
-
-# Build platform for all targets (for distribution)
-just build-all
-
-# Bundle platform for distribution (creates .tar.zst)
-just bundle
-
-# Run tests (Roc only - fast, ~50ms)
-just test
-
-# Run all tests including Zig FFI tests (slow, ~600ms)
-just test-all
-
-# Build and test in one shot
-just dev
-
-# Clean build artifacts
-just clean
-
-# Nuke everything including Roc cache
-just nuke
-```
-
-**Important test distinction:** `just test` runs Roc runtime assertions only. `just test-zig` includes Zig FFI boundary tests. Use `just test` for rapid development, `just test-zig` when modifying platform internals.
+**Important test distinction:** `just test` runs Roc runtime assertions only. `just test-all` includes Zig FFI boundary tests. Use `just test` for rapid development, `just test-all` when modifying platform internals.
 
 ## Architecture: Platform Coupling
 
