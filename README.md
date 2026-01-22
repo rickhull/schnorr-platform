@@ -64,7 +64,8 @@ main! = |_args| {
 
 ## Links
 
-- **Platform development**: [docs/platform-dev-guide.md](docs/platform-dev-guide.md)
+- **Testing**: [docs/TEST_PLAN.md](docs/TEST_PLAN.md)
+- **Roc vs Zig testing**: [docs/TEST_TYPES.md](docs/TEST_TYPES.md)
 - **Nostr protocol**: [nostr-protocol/nostr](https://github.com/nostr-protocol/nostr)
 
 ## Project Overview
@@ -76,17 +77,23 @@ This is a **Roc platform** providing BIP-340 Schnorr cryptographic operations vi
 ## Build & Test Commands
 
 ```bash
-# One-time setup (installs Roc, builds platform, fetches docs)
+# One-time setup (installs Roc, builds platform)
 just setup
 
 # Build platform for native architecture
 just build
 
+# Build platform for all targets (for distribution)
+just build-all
+
+# Bundle platform for distribution (creates .tar.zst)
+just bundle
+
 # Run tests (Roc only - fast, ~50ms)
 just test
 
 # Run all tests including Zig FFI tests (slow, ~600ms)
-just test-zig
+just test-all
 
 # Build and test in one shot
 just dev
